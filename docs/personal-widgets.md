@@ -11,6 +11,9 @@ resizable window. Select a card to open its details alongside the overview:
 every reported quota, balance, reset date and last measurement. Unavailable or
 stale readings stay explicitly marked. The app only names a plan when the
 provider supplies it, and explains the scope of each service's readings.
+When reported, Fable appears first on Claude's overview card, followed by the
+session and all-model weekly allowance. Fable's percentage is highlighted in
+Claude's accent color; it is visible without opening the details sidebar.
 
 Use **Refresh** (⌘R) for all providers, **Refresh reading** for the selected one,
 or **Manage accounts** to open the existing account settings. The menu bar's

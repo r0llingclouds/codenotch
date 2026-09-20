@@ -23,6 +23,49 @@ final class UsageDashboardRouteTests: XCTestCase {
 
 @MainActor
 final class UsageDashboardTests: XCTestCase {
+    func testFableAppearsFirstOnTheCardWithoutLosingSessionOrWeeklyTotal() {
+        let meters = [
+            meter("session", "Current session", 0.08),
+            meter("weekly_all", "All models", 0.17),
+            meter("weekly_opus", "Opus", 0.02),
+            meter("weekly_scoped", "Fable", 0.26),
+        ]
+        let reading = WidgetProviderReading(id: "claude", name: "Claude", state: .ready,
+                                            measuredAt: Date(), meters: meters)
+        let visible = DashboardOverview.meters(for: reading)
+        XCTAssertEqual(visible.map(\.id), ["weekly_scoped", "session", "weekly_all"])
+        XCTAssertEqual(visible.map(\.usedFraction), [0.26, 0.08, 0.17])
+        XCTAssertEqual(reading.meters, meters, "The detail retains every quota in the original order")
+    }
+
+    func testMissingFableDoesNotRenameOrInventAScopedQuota() {
+        let meters = [meter("session", "Current session", 0.08),
+                      meter("weekly_all", "All models", 0.17),
+                      meter("weekly_scoped", "Sonnet", 0.12)]
+        let reading = WidgetProviderReading(id: "claude", name: "Claude", state: .stale,
+                                            measuredAt: Date(), meters: meters)
+        XCTAssertEqual(DashboardOverview.meters(for: reading), meters)
+        XCTAssertFalse(meters.contains(where: DashboardOverview.isFable))
+        XCTAssertTrue(DashboardOverview.isFable(meter("weekly_scoped", "Fable 5.1", 0.26)))
+        XCTAssertTrue(DashboardOverview.isFable(meter("weekly_fable", "Scoped", 0.26)))
+    }
+
+    func testEmptyClaudeAndOtherProvidersKeepTheirExistingPresentation() {
+        let empty = WidgetProviderReading(id: "claude", name: "Claude", state: .notConnected,
+                                          measuredAt: nil, meters: [])
+        XCTAssertTrue(DashboardOverview.meters(for: empty).isEmpty)
+        let meters = [meter("auto", "Auto usage", 0.08), meter("api", "API", 0.17),
+                      meter("on_demand", "On demand", 0.26)]
+        let cursor = WidgetProviderReading(id: "cursor", name: "Cursor", state: .ready,
+                                           measuredAt: Date(), meters: meters)
+        XCTAssertEqual(DashboardOverview.meters(for: cursor), Array(meters.prefix(2)))
+    }
+
+    private func meter(_ id: String, _ label: String, _ fraction: Double) -> WidgetUsageMeter {
+        WidgetUsageMeter(id: id, label: label, usedFraction: fraction, value: "",
+                         resetsAt: nil, resetDescription: nil)
+    }
+
     func testSelectionFollowsNewReadingsAndDisconnection() throws {
         let model = UsageDashboardModel()
         model.select("claude")

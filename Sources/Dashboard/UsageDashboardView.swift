@@ -119,6 +119,7 @@ private struct DashboardCard: View {
 
     var body: some View {
         let tint = DashboardBrand.color(reading.id)
+        let meters = DashboardOverview.meters(for: reading)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 DashboardBrand(id: reading.id, size: 23)
@@ -136,9 +137,10 @@ private struct DashboardCard: View {
                     .font(.system(size: 16, weight: .medium)).foregroundStyle(dashboardMuted)
                 Spacer(minLength: 0)
             } else {
-                HStack(alignment: .top, spacing: 18) {
-                    ForEach(Array(reading.meters.prefix(2))) { meter in
-                        DashboardMeter(meter: meter, tint: tint, compact: true)
+                HStack(alignment: .top, spacing: meters.count > 2 ? 10 : 18) {
+                    ForEach(meters) { meter in
+                        DashboardMeter(meter: meter, tint: tint, compact: true,
+                                       prominent: reading.id == "claude" && DashboardOverview.isFable(meter))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -180,14 +182,16 @@ private struct DashboardMeter: View {
     let meter: WidgetUsageMeter
     let tint: Color
     var compact = false
+    var prominent = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(meter.usedFraction.map(DashboardCopy.percentage) ?? meter.value)
                 .font(.system(size: compact ? 29 : 34, weight: .semibold, design: .rounded))
                 .monospacedDigit().lineLimit(1).minimumScaleFactor(0.55)
-                .foregroundStyle(meter.usedFraction == nil ? tint : dashboardInk)
-            Text(meter.label).font(.system(size: 11)).foregroundStyle(dashboardMuted).lineLimit(1)
+                .foregroundStyle(meter.usedFraction == nil || prominent ? tint : dashboardInk)
+            Text(compact && meter.id == "session" ? L10n.t("Session") : meter.label)
+                .font(.system(size: 11)).foregroundStyle(dashboardMuted).lineLimit(1)
             if let fraction = meter.usedFraction, fraction.isFinite, fraction >= 0 {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
