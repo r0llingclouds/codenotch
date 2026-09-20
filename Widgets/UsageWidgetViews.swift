@@ -131,13 +131,14 @@ private struct CompactMeter: View {
     var narrow = false
     var condensed = false
     var emphasized = false
+    var large = false
     var body: some View {
         VStack(alignment: .leading, spacing: condensed ? 2 : 3) {
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text(percentageNumber(meter.usedFraction ?? 0))
-                    .font(.system(size: condensed ? 11 : narrow ? 15 : 16, weight: .semibold, design: .rounded))
+                    .font(.system(size: condensed ? 11 : large ? 22 : narrow ? 15 : 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(emphasized ? color : widgetInk)
-                Text("%").font(.system(size: condensed ? 7 : 9, weight: .medium)).foregroundStyle(widgetMuted)
+                Text("%").font(.system(size: condensed ? 7 : large ? 10 : 9, weight: .medium)).foregroundStyle(widgetMuted)
                 if !narrow {
                     Spacer(minLength: 2)
                     Text(compactLabel(meter)).font(.system(size: 8, weight: .medium))
@@ -145,7 +146,7 @@ private struct CompactMeter: View {
                 }
             }
             if narrow {
-                Text(compactLabel(meter)).font(.system(size: 7, weight: .medium))
+                Text(compactLabel(meter)).font(.system(size: large ? 8 : 7, weight: .medium))
                     .foregroundStyle(widgetMuted).lineLimit(1).minimumScaleFactor(0.8)
             }
             MeterTrack(fraction: meter.usedFraction ?? 0, color: (meter.usedFraction ?? 0) >= 0.9 ? .red : color)
@@ -204,13 +205,14 @@ private struct CompactProviderCard: View {
     let reading: WidgetProviderReading
     let date: Date
     var narrow = false
+    var expanded = false
     var body: some View {
         let color = ProviderStyle(id: reading.id).color
         let state = reading.effectiveState(at: date)
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: expanded ? 8 : 4) {
             HStack(spacing: 6) {
-                ProviderMark(id: reading.id, size: 13)
-                Text(reading.name).font(.system(size: narrow ? 10 : 11, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                ProviderMark(id: reading.id, size: expanded ? 15 : 13)
+                Text(reading.name).font(.system(size: expanded ? 12 : narrow ? 10 : 11, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 0)
                 if state == .stale {
                     Image(systemName: "clock").font(.system(size: 9)).foregroundStyle(.orange)
@@ -222,6 +224,14 @@ private struct CompactProviderCard: View {
                 if let balance = meters.first, balance.usedFraction == nil {
                     CreditAmount(meter: balance, color: color, stacked: narrow)
                         .frame(maxHeight: .infinity, alignment: .center)
+                } else if expanded {
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(meters) { meter in
+                            CompactMeter(meter: meter, color: color, narrow: true,
+                                         emphasized: UsageMeterSelection.isFable(meter), large: true)
+                        }
+                    }
+                    .frame(maxHeight: .infinity, alignment: .center)
                 } else if narrow, meters.count == 3, let featured = meters.first {
                     VStack(spacing: 2) {
                         FeaturedQuota(meter: featured, color: color)
@@ -284,26 +294,57 @@ struct UsageOverview: View {
     let snapshot: UsageWidgetSnapshot
     let date: Date
     var googleOnly = false
+
+    private func columnSpan(for reading: WidgetProviderReading) -> Int {
+        !googleOnly && reading.id == "claude" ? 2 : 1
+    }
+
+    private var cardRows: [[WidgetProviderReading]] {
+        let readings = snapshot.providers.filter {
+            googleOnly ? ["gemini-chat", "notebooklm", "google-flow"].contains($0.id)
+                       : $0.id != "google-flow"
+        }
+        var rows: [[WidgetProviderReading]] = []
+        var row: [WidgetProviderReading] = []
+        var columnsUsed = 0
+        for reading in readings {
+            let span = columnSpan(for: reading)
+            if columnsUsed + span > 3 {
+                rows.append(row)
+                row = []
+                columnsUsed = 0
+            }
+            row.append(reading)
+            columnsUsed += span
+        }
+        if !row.isEmpty { rows.append(row) }
+        return rows
+    }
+
     var body: some View {
-        let readings = snapshot.providers.filter { !googleOnly || ["gemini-chat", "notebooklm", "google-flow"].contains($0.id) }
+        let rows = cardRows
         VStack(alignment: .leading, spacing: 8) {
             Text(googleOnly ? "Google AI Pro" : L10n.t("AI usage"))
                 .font(.system(size: googleOnly ? 17 : 18, weight: .semibold, design: .rounded))
                 .tracking(-0.5)
             GeometryReader { geometry in
-                let columns = googleOnly || readings.count > 8 ? 3 : 2
-                let rows = max(1, (readings.count + columns - 1) / columns)
                 let gap: CGFloat = 7
-                let height = max(0, (geometry.size.height - CGFloat(rows - 1) * gap) / CGFloat(rows))
+                let rowCount = max(1, rows.count)
+                let height = max(0, (geometry.size.height - CGFloat(rowCount - 1) * gap) / CGFloat(rowCount))
+                let columnWidth = max(0, (geometry.size.width - 2 * gap) / 3)
                 VStack(spacing: gap) {
-                    ForEach(0..<rows, id: \.self) { row in
+                    ForEach(rows.indices, id: \.self) { row in
                         HStack(spacing: gap) {
-                            ForEach(Array(readings.dropFirst(row * columns).prefix(columns))) { reading in
+                            ForEach(rows[row]) { reading in
+                                let span = columnSpan(for: reading)
                                 Link(destination: URL(string: "codenotch-usage://provider/\(reading.id)")!) {
-                                    CompactProviderCard(reading: reading, date: date, narrow: columns == 3)
-                                }.buttonStyle(.plain)
+                                    CompactProviderCard(reading: reading, date: date,
+                                                        narrow: span == 1, expanded: span == 2)
+                                }
+                                .buttonStyle(.plain)
+                                .frame(width: columnWidth * CGFloat(span) + gap * CGFloat(span - 1))
                             }
-                        }.frame(height: height)
+                        }.frame(maxWidth: .infinity, alignment: .leading).frame(height: height)
                     }
                 }
             }

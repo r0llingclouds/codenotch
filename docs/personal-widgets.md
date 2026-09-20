@@ -63,13 +63,15 @@ Calendar days follow the Mac's timezone, including daylight-saving changes.
 
 ## Widgets
 
-- **All AI usage** (large): Codex, Claude, Cursor, Kimi, GLM, DeepSeek, Gemini chat,
-  NotebookLM and Google Flow.
+- **All AI usage** (large): Codex, Claude, Cursor, Kimi, GLM, DeepSeek, Gemini chat
+  and NotebookLM. Claude spans two columns with Fable, session and weekly usage
+  side by side. Flow remains available in the app and the other widget types.
 - **Provider usage** (small or medium): choose one provider in Edit Widget.
 - **Google AI Pro** (medium): three separate meters for Gemini chat, NotebookLM
   and Flow. Antigravity and Gemini API quotas do not represent these products.
 
-The overview displays all nine providers in a three-column grid.
+The overview uses a three-column grid: Codex beside a double-width Claude card,
+then Cursor / Kimi / GLM and DeepSeek / Gemini / NotebookLM.
 Its compact header shows only the title; the branding and aggregate readiness
 counter are omitted so the usage cards have more vertical space.
 The widget design uses a dark blue background, provider marks, compact colored
@@ -77,7 +79,7 @@ cards and larger usage figures. Individual provider widgets use a circular main
 meter; the small size also retains the second quota, and the medium size shows
 up to three. Credit balances remain amounts rather than percentage gauges.
 Missing and stale readings keep their explicit status.
-Claude's card gives Fable a highlighted row above the session and weekly
+Claude's wider card highlights Fable alongside the session and weekly
 allowance. The individual Claude widgets use Fable for the main ring and keep
 both other quotas visible, including in the small size. The app and widgets
 share the same quota-priority selection.
