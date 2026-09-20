@@ -1,5 +1,8 @@
 import Foundation
+import Combine
+#if !PERSONAL_WIDGETS
 import Sparkle
+#endif
 
 /// Keeps the app up to date on its own.
 ///
@@ -14,7 +17,7 @@ import Sparkle
 /// normal drag to /Applications, false if it was copied there with `sudo`), and
 /// the replacement is applied on relaunch rather than mid-flight.
 @MainActor
-final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
+final class Updater: NSObject, ObservableObject {
     /// What the last check came to, in words the settings sheet can show.
     ///
     /// Sparkle's own answer to a failed check is a modal saying "an error
@@ -48,6 +51,7 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
 
     private var isPersonalFork: Bool { Bundle.main.object(forInfoDictionaryKey: "CodenotchPersonalFork") as? Bool == true }
 
+    #if !PERSONAL_WIDGETS
     private lazy var controller = SPUStandardUpdaterController(
         startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil
     )
@@ -63,10 +67,18 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
         }
     }
 
+    #else
+    var automatic: Bool {
+        get { false }
+        set {}
+    }
+    #endif
+
     var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
     }
 
+    #if !PERSONAL_WIDGETS
     var lastChecked: Date? { isPersonalFork ? nil : controller.updater.lastUpdateCheckDate }
 
     /// Starts the scheduled checks. Deliberately not in `init`: the controller
@@ -94,6 +106,14 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
         }
     }
 
+    #else
+    var lastChecked: Date? { nil }
+    func start() {}
+    func checkNow() {
+        outcome = .failed(L10n.t("Personal fork: update from your GitHub checkout."))
+    }
+    #endif
+
     /// How long a check may stay unanswered before it is called stalled.
     static let checkTimeout: TimeInterval = 45
     private var checkGeneration = 0
@@ -113,6 +133,7 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
         return isUnreachable(errorCode) ? .unreachable : .idle
     }
 
+    #if !PERSONAL_WIDGETS
     // MARK: - SPUUpdaterDelegate
 
     nonisolated func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
@@ -145,8 +166,16 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
         }
     }
 
+    #endif
+
     /// Sparkle folds every "could not load the feed" case into one code.
     static func isUnreachable(_ code: Int) -> Bool {
-        code == Int(SUError.appcastError.rawValue)
+        // Keep the upstream outcome tests usable without loading its updater.
+        // Sparkle SUErrors.h: SUAppcastError = 1002.
+        code == 1002
     }
 }
+
+#if !PERSONAL_WIDGETS
+extension Updater: SPUUpdaterDelegate {}
+#endif

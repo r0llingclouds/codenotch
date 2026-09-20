@@ -52,7 +52,7 @@ final class GoogleUsagePagesTests: XCTestCase {
     }
 
     func testFlowCreditsHaveNoInventedDenominator() throws {
-        for text in ["1,000 AI credits", "1.000 créditos de IA", "Remaining credits: 1000"] {
+        for text in ["1,000 AI credits", "1,000 Google Flow credits", "1.000 créditos de IA", "Remaining credits: 1000"] {
             let windows = try GoogleUsagePages.parseCredits(text)
             XCTAssertEqual(windows[0].remaining, 1000)
             XCTAssertNil(windows[0].usedFraction)

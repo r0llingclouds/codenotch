@@ -31,7 +31,9 @@ The personal-widgets GitHub Actions workflow also tests the app and produces
 `Codenotch-Widgets.zip`. Builds are ad-hoc signed for local use, not notarized
 releases. This fork uses `com.r0llingclouds.codenotch`, so its preferences and
 WidgetKit extension are distinct from upstream. Upstream automatic updates are
-disabled so they cannot overwrite the fork. Update by rebuilding this checkout.
+disabled so they cannot overwrite the fork. The personal app does not link the
+Sparkle framework; this also avoids its Team ID mismatch in ad-hoc builds.
+Update by rebuilding this checkout.
 
 Open Codenotch once. In macOS, right-click the desktop, choose **Edit Widgets**,
 search **Codenotch**, then add the desired widget. The same widgets work in
@@ -40,14 +42,21 @@ change its provider.
 
 ## Connecting providers
 
-Codex, Claude, Kimi and GLM use upstream's existing local credential discovery.
+Codex and Claude use upstream's local credential discovery. The OpenAI meter
+measures **Codex usage on your ChatGPT plan**, not ChatGPT web chat activity.
+Kimi reads the managed Kimi Code login, including the current global `.ai`
+region and environment-specific credential file. Its current 5h and monthly
+ratios take priority over legacy counters. Kimi itself owns token renewal;
+opening Kimi Code and running `/usage` refreshes an expired session without
+making a model request. GLM also supports the selected Coding Plan credential
+in current OpenCode's SQLite database, alongside upstream's older sources.
 Sign into the appropriate official tool first. DeepSeek uses its explicit
 in-app Platform login, which supports balance and API-key/model breakdowns.
 
 For each Google provider, use its **Sign in** action in Codenotch Accounts.
 Complete Google sign-in in the displayed window, then close that window.
-Gemini opens its `/usage` page; NotebookLM opens Settings → Usage; Flow reads
-the profile credit panel. English and Spanish quota labels are supported.
+Gemini opens its `/usage` page; NotebookLM opens Settings → Usage; Flow opens `https://flow.google.com/` and reads
+Account details → Google Flow credits. English and Spanish quota labels are supported.
 Each Google product has its own persistent WebKit store, so disconnecting one
 does not erase another product's browser session. No Safari/Chrome cookies are
 read or copied. Google can refuse embedded-browser sign-in; this condition
@@ -85,3 +94,11 @@ Parser and snapshot regression tests are in `Tests/UsageWidgetTests.swift`.
 Successful compilation alone does not verify WidgetKit registration or Google
 sign-in. Verify gallery registration, rendered widgets, a real quota refresh,
 and each Google sign-in after installing.
+
+## Verified locally
+
+On 2026-09-20, the Release app launched from `/Applications/Codenotch.app`;
+macOS registered the extension and the owner added **All AI usage** to the
+desktop and confirmed live readings. Codex, Claude, DeepSeek, Gemini chat and
+NotebookLM returned real data after account setup. The Gemini and NotebookLM
+quota panels and Flow's account credit panel were inspected in the app.

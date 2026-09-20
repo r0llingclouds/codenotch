@@ -6,7 +6,7 @@ enum GoogleUsagePages {
     static let sites: [WebSessionProvider.Site] = [
         site(id: "gemini-chat", name: "Gemini chat", url: "https://gemini.google.com/usage", kind: "quota"),
         site(id: "notebooklm", name: "NotebookLM", url: "https://notebook.google.com/", kind: "notebook"),
-        site(id: "google-flow", name: "Google Flow", url: "https://labs.google/fx/tools/flow", kind: "flow")
+        site(id: "google-flow", name: "Google Flow", url: "https://flow.google.com/", kind: "flow")
     ]
 
     private static func site(id: String, name: String, url: String, kind: String) -> WebSessionProvider.Site {
@@ -16,7 +16,7 @@ enum GoogleUsagePages {
         return WebSessionProvider.Site(id: id, displayName: name, glyph: .geminiSpark,
             origin: URL(string: url)!, script: script(kind: kind),
             authProbeScript: #"""
-            const account = document.querySelector('a[href*="accounts.google.com/SignOutOptions"], [aria-label^="Google Account:"], [aria-label^="Cuenta de Google:"]');
+            const account = document.querySelector('a[href*="accounts.google.com/SignOutOptions"], [aria-label^="Google Account:"], [aria-label^="Cuenta de Google:"], button[aria-label="Account details"], button[aria-label="Detalles de la cuenta"]');
             return JSON.stringify({authenticated: !!account});
             """#,
             reloadBeforeFetch: true,
@@ -111,10 +111,13 @@ enum GoogleUsagePages {
         await wait(1500);
         if (controls().some(e => /^(Sign in|Iniciar sesión|Acceder)$/i.test(label(e)))) return reply(401);
         if (kind === 'flow') {
-            click(/^(Google Account:|Cuenta de Google:|Account menu|Profile|Perfil)/i);
+            click(/^(Google Account:|Cuenta de Google:|Account menu|Account details|Detalles de la cuenta|Profile|Perfil)/i);
             await wait(700);
-            const panels = Array.from(document.querySelectorAll('[role="dialog"], [role="menu"], [data-radix-popper-content-wrapper]')).filter(visible);
+            const panels = Array.from(document.querySelectorAll('[role="dialog"], [role="menu"], [data-radix-popper-content-wrapper], [aria-label="Account settings"], [aria-label="Credits display"], [aria-label="Configuración de la cuenta"]')).filter(visible);
             const panel = panels.find(e => /credits|créditos/i.test(e.innerText));
+            // The current Flow account panel exposes the balance as a link.
+            const balances = controls().filter(e => /^[\d,. ]+\s+(?:Google Flow\s+|AI\s+)?credits?$/i.test(label(e)));
+            if (balances.length === 1) return reply(200, label(balances[0]));
             if (!panel) return reply(200);
             // Keep only balance lines; exclude upsell packages and generation costs.
             const lines = panel.innerText.split('\n').map(s => s.trim()).filter(Boolean);

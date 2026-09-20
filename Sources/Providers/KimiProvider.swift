@@ -33,7 +33,7 @@ actor KimiProvider: UsageProvider {
         let credentials = try KimiCredentials.load(from: authURL)
         if credentials.isExpired { throw UsageProviderError.credentialExpired }
 
-        let body = try await fetch(token: credentials.accessToken)
+        let body = try await fetch(token: credentials.accessToken, endpoint: credentials.endpoint)
         Log.usage.debug("kimi usages -> \(body.prefix(400), privacy: .public)")
         let read = try KimiUsage.read(fromJSON: body)
 
@@ -50,13 +50,14 @@ actor KimiProvider: UsageProvider {
         )
     }
 
-    private func fetch(token: String) async throws -> String {
-        var request = URLRequest(url: KimiUsage.endpoint)
+    private func fetch(token: String, endpoint: URL) async throws -> String {
+        var request = URLRequest(url: endpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Codenotch/1.16.0", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 15
 
-        Log.usage.debug("GET api.kimi.com/coding/v1/usages")
+        Log.usage.debug("GET Kimi coding usage")
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         Log.usage.debug("kimi usages endpoint answered \(status)")

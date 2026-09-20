@@ -19,11 +19,8 @@ settings:
     # update. Bump CURRENT_PROJECT_VERSION on every release.
     MARKETING_VERSION: "1.16.0"
     CURRENT_PROJECT_VERSION: "19"
-    # Signed with a stable identity on purpose. The app reads Claude Code's
-    # OAuth token out of the login keychain, and the keychain's ACL remembers
-    # *which signed binary* was allowed. Ad-hoc or unsigned builds get a new
-    # identity on every rebuild, so "Always Allow" would be forgotten each time
-    # and the prompt would come back after every `make run`.
+    # Personal builds are ad-hoc signed. A stable development identity can
+    # be supplied locally to retain Keychain approval across rebuilds.
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: ""
@@ -63,7 +60,6 @@ targets:
     dependencies:
       - target: CodenotchWidget
         embed: true
-      - package: Sparkle
       - package: SwiftNIO
         product: NIOHTTP1
       - package: SwiftNIO
@@ -123,6 +119,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) PERSONAL_WIDGETS"
         CODE_SIGN_ENTITLEMENTS: "$(CODENOTCH_APP_ENTITLEMENTS)"
         GENERATE_INFOPLIST_FILE: "NO"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -170,6 +167,7 @@ targets:
       - path: Tests
     dependencies:
       - target: Codenotch
+      - package: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.tests
