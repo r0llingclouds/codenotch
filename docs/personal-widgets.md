@@ -99,6 +99,9 @@ and each Google sign-in after installing.
 
 On 2026-09-20, the Release app launched from `/Applications/Codenotch.app`;
 macOS registered the extension and the owner added **All AI usage** to the
-desktop and confirmed live readings. Codex, Claude, DeepSeek, Gemini chat and
-NotebookLM returned real data after account setup. The Gemini and NotebookLM
-quota panels and Flow's account credit panel were inspected in the app.
+desktop and confirmed live readings. All eight providers returned real data
+after account setup, including Kimi's current monthly quotas, GLM Max through
+OpenCode and Flow's credit balance. The Gemini and NotebookLM quota panels and
+Flow's account credit panel were inspected in the app. The app passed 1,711
+local tests (three skipped), followed by 26 focused tests covering the final
+provider and credential changes.
