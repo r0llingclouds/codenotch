@@ -672,10 +672,7 @@ final class SQLiteStoreTests: XCTestCase {
         return url
     }
 
-    /// The regression: a `mode=ro` open needs the `-shm` sidecar, and that only
-    /// exists while the owning app is running. After a restart it is gone and a
-    /// read-only open fails outright — which is how Codex came back from a
-    /// reboot reporting "no threads on this machine".
+    /// Checkpointed WAL files remain readable after the owning app quits.
     func testOpensAfterTheOwningAppHasQuit() throws {
         let url = try makeDatabase()
         defer { try? FileManager.default.removeItem(at: url) }
@@ -689,6 +686,76 @@ final class SQLiteStoreTests: XCTestCase {
     func testAMissingFileIsNil() {
         let missing = URL(fileURLWithPath: "/tmp/nope-\(UUID().uuidString).sqlite")
         XCTAssertNil(SQLiteStore.open(missing))
+    }
+
+    func testCheckpointedWALRemainsReadableWithoutPermissionToCreateSidecars() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("readonly-store-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let source = try makeDatabase()
+        defer { try? FileManager.default.removeItem(at: source) }
+        // Copy only the checkpointed main file: some SQLite builds retain
+        // empty WAL sidecars even after the last connection closes.
+        let url = directory.appendingPathComponent("state.vscdb")
+        try FileManager.default.copyItem(at: source, to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path + "-wal"))
+
+        // SQLite can report a successful open before its first page read fails.
+        var ordinary: OpaquePointer?
+        XCTAssertEqual(sqlite3_open_v2(url.path, &ordinary, SQLITE_OPEN_READONLY, nil), SQLITE_OK)
+        XCTAssertNotEqual(sqlite3_exec(ordinary, "PRAGMA schema_version", nil, nil, nil), SQLITE_OK)
+        sqlite3_close(ordinary)
+
+        let db = try XCTUnwrap(SQLiteStore.open(url))
+        defer { sqlite3_close(db) }
+        XCTAssertEqual(SQLiteStore.rows(in: db, sql: "SELECT v FROM t"), ["hello", "world"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path + "-wal"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path + "-shm"))
+    }
+
+    func testLiveWALReadsTheLatestCommittedValue() throws {
+        let url = try makeDatabase()
+        defer { try? FileManager.default.removeItem(at: url) }
+        var writer: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(url.path, &writer), SQLITE_OK)
+        defer { sqlite3_close(writer) }
+        XCTAssertEqual(sqlite3_exec(writer, "INSERT INTO t VALUES ('newest');", nil, nil, nil), SQLITE_OK)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path + "-wal"))
+
+        let reader = try XCTUnwrap(SQLiteStore.open(url))
+        defer { sqlite3_close(reader) }
+        XCTAssertEqual(SQLiteStore.rows(in: reader, sql: "SELECT v FROM t"), ["hello", "world", "newest"])
+    }
+
+    func testUnreadableWALNeverFallsBackToAnOldCheckpoint() throws {
+        let source = try makeDatabase()
+        defer { try? FileManager.default.removeItem(at: source) }
+        var writer: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(source.path, &writer), SQLITE_OK)
+        defer { sqlite3_close(writer) }
+        XCTAssertEqual(sqlite3_exec(writer, "INSERT INTO t VALUES ('newest');", nil, nil, nil), SQLITE_OK)
+        // A separate path avoids reusing the writer's already-open WAL handle.
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("inaccessible-wal-\(UUID().uuidString).sqlite")
+        try FileManager.default.copyItem(at: source, to: url)
+        try FileManager.default.copyItem(atPath: source.path + "-wal", toPath: url.path + "-wal")
+        defer {
+            for suffix in ["", "-wal", "-shm"] {
+                try? FileManager.default.removeItem(atPath: url.path + suffix)
+            }
+        }
+        let walPath = url.path + "-wal"
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: walPath)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: walPath) }
+
+        let reader = SQLiteStore.open(url)
+        defer { sqlite3_close(reader) }
+        XCTAssertNil(reader, "An inaccessible WAL must not turn into stale credentials from the main file")
     }
 }
 
