@@ -70,8 +70,20 @@ final class GoogleUsagePagesTests: XCTestCase {
 final class UsageWidgetTests: XCTestCase {
     func testSnapshotContainsAllMetersAndDoesNotInventMissingValues() {
         let snapshot = WidgetSnapshotPublisher.makeSnapshot([], disconnected: [], dates: [:])
-        XCTAssertEqual(snapshot.providers.count, 8)
+        XCTAssertEqual(snapshot.providers.map(\.id), ["codex", "claude", "cursor", "kimi", "glm", "deepseek", "gemini-chat", "notebooklm", "google-flow"])
         XCTAssertTrue(snapshot.providers.allSatisfy { $0.state == .notConnected && $0.meters.isEmpty && $0.measuredAt == nil })
+    }
+
+    func testCursorAutoAndAPIAllowancesArePublishedSeparately() throws {
+        let now = Date(timeIntervalSince1970: 2000)
+        let windows = try CursorUsage.windows(fromJSON: #"{"individualUsage":{"plan":{"autoPercentUsed":12,"apiPercentUsed":37}}}"#)
+        let source = ProviderSnapshot(id: "cursor", displayName: "Cursor", glyph: .cursor,
+            fidelity: .official, status: .ok, windows: windows)
+        let snapshot = WidgetSnapshotPublisher.makeSnapshot([source], disconnected: [], dates: ["cursor": now], now: now)
+        let cursor = try XCTUnwrap(snapshot.providers.first { $0.id == "cursor" })
+        XCTAssertEqual(cursor.effectiveState(at: now), .ready)
+        XCTAssertEqual(cursor.meters.map(\.id), ["auto", "api"])
+        XCTAssertEqual(cursor.meters.compactMap(\.usedFraction), [0.12, 0.37])
     }
 
     func testDisabledProviderCannotLeakArchivedReadings() {

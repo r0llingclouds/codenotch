@@ -6,12 +6,13 @@ balances, status and measurement dates. Upstream Codenotch remains MIT licensed.
 
 ## Widgets
 
-- **All AI usage** (large): Codex, Claude, Kimi, GLM, DeepSeek, Gemini chat,
+- **All AI usage** (large): Codex, Claude, Cursor, Kimi, GLM, DeepSeek, Gemini chat,
   NotebookLM and Google Flow.
 - **Provider usage** (small or medium): choose one provider in Edit Widget.
 - **Google AI Pro** (medium): three separate meters for Gemini chat, NotebookLM
   and Flow. Antigravity and Gemini API quotas do not represent these products.
 
+The overview displays all nine providers in a three-column grid.
 The widget design uses a dark blue background, provider marks, compact colored
 cards and larger usage figures. Individual provider widgets use a circular main
 meter; the small size also retains the second quota, and the medium size shows
@@ -48,7 +49,10 @@ change its provider.
 
 ## Connecting providers
 
-Codex and Claude use upstream's local credential discovery. The OpenAI meter
+Codex, Claude and Cursor use upstream's local credential discovery. Cursor
+reads the account signed into the editor and shows its reported Auto, API and
+on-demand allowances. The overview displays the first two meters; the medium
+provider widget can show three. The OpenAI meter
 measures **Codex usage on your ChatGPT plan**, not ChatGPT web chat activity.
 Kimi reads the managed Kimi Code login, including the current global `.ai`
 region and environment-specific credential file. Its current 5h and monthly
@@ -118,3 +122,12 @@ images and snapshots under the ignored `build/` directory; they can contain
 personal usage and balances. The redesigned widgets were checked in all four
 sizes/layouts and in the unconnected state. The complete suite passed again:
 1,714 tests, three skipped, zero failures.
+
+The Cursor update adds a ninth provider, a three-column overview and a Cursor
+choice for individual widgets. Twenty focused Cursor parser and widget snapshot
+tests passed, including separate Auto/API allowances. The full-suite rerun was
+blocked by the local Xcode test host while loading/symbolicating files; it is
+not counted as a successful full run. The native overview and Google layouts
+were rendered and checked again, including the sub-1% Cursor reading.
+Release build 21 was installed and its registered extension's cache confirmed
+all nine providers, including a ready Cursor reading from the signed-in editor.

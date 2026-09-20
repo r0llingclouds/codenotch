@@ -8,7 +8,7 @@ struct UsageWidgetSnapshot: Codable, Equatable {
     var providers: [WidgetProviderReading]
 
     static let catalogue: [(id: String, name: String)] = [
-        ("codex", "Codex"), ("claude", "Claude"), ("kimi", "Kimi"),
+        ("codex", "Codex"), ("claude", "Claude"), ("cursor", "Cursor"), ("kimi", "Kimi"),
         ("glm", "GLM"), ("deepseek", "DeepSeek"), ("gemini-chat", "Gemini"),
         ("notebooklm", "NotebookLM"), ("google-flow", "Flow")
     ]

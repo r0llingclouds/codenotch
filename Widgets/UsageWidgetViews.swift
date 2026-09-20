@@ -21,6 +21,7 @@ private struct ProviderStyle {
     var color: Color {
         switch id {
         case "codex": return Color(red: 0.44, green: 0.86, blue: 0.72)
+        case "cursor": return Color(red: 0.79, green: 0.84, blue: 0.94)
         case "claude": return Color(red: 1, green: 0.64, blue: 0.44)
         case "kimi": return Color(red: 0.77, green: 0.65, blue: 1)
         case "glm": return Color(red: 0.46, green: 0.78, blue: 0.98)
@@ -34,6 +35,7 @@ private struct ProviderStyle {
         switch id {
         case "codex": return GlyphOutline.openai
         case "claude": return GlyphOutline.claude
+        case "cursor": return GlyphOutline.cursor
         case "kimi": return GlyphOutline.kimi
         case "glm": return GlyphOutline.glm
         case "gemini-chat": return GlyphOutline.gemini
@@ -93,10 +95,17 @@ private func compactLabel(_ meter: WidgetUsageMeter) -> String {
     case "monthly": return L10n.t("Month")
     case "monthly-code": return L10n.t("Code")
     case "rolling": return "5h"
+    case "auto": return L10n.t("Auto")
+    case "api": return "API"
     default:
         if meter.label == "Weekly limit" { return L10n.t("Week") }
         return meter.label
     }
+}
+
+private func percentageNumber(_ fraction: Double) -> String {
+    if fraction > 0 && fraction < 0.01 { return "<1" }
+    return String(Int((fraction * 100).rounded()))
 }
 
 private struct MeterTrack: View {
@@ -123,7 +132,7 @@ private struct CompactMeter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 1) {
-                Text("\(Int(((meter.usedFraction ?? 0) * 100).rounded()))")
+                Text(percentageNumber(meter.usedFraction ?? 0))
                     .font(.system(size: narrow ? 15 : 16, weight: .semibold, design: .rounded))
                 Text("%").font(.system(size: 9, weight: .medium)).foregroundStyle(widgetMuted)
                 if !narrow {
@@ -133,10 +142,10 @@ private struct CompactMeter: View {
                 }
             }
             if narrow {
-                Text(compactLabel(meter)).font(.system(size: 7, weight: .medium)).foregroundStyle(widgetMuted).lineLimit(1)
-            } else {
-                MeterTrack(fraction: meter.usedFraction ?? 0, color: (meter.usedFraction ?? 0) >= 0.9 ? .red : color)
+                Text(compactLabel(meter)).font(.system(size: 7, weight: .medium))
+                    .foregroundStyle(widgetMuted).lineLimit(1).minimumScaleFactor(0.8)
             }
+            MeterTrack(fraction: meter.usedFraction ?? 0, color: (meter.usedFraction ?? 0) >= 0.9 ? .red : color)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
@@ -148,10 +157,13 @@ private struct CreditAmount: View {
     let meter: WidgetUsageMeter
     let color: Color
     var large = false
+    var stacked = false
     var body: some View {
         // This remains a balance, never a fabricated percent of a plan limit.
         let amount = meter.value.replacingOccurrences(of: " left", with: "")
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
+        let layout = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 3))
+                             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 5))
+        layout {
             Text(amount).font(.system(size: large ? 29 : 21, weight: .semibold, design: .rounded))
                 .foregroundStyle(color).lineLimit(1).minimumScaleFactor(0.6)
             if !large {
@@ -185,7 +197,7 @@ private struct CompactProviderCard: View {
             if (state == .ready || state == .stale), !reading.meters.isEmpty {
                 let meters = Array(reading.meters.prefix(2))
                 if let balance = meters.first, balance.usedFraction == nil {
-                    CreditAmount(meter: balance, color: color)
+                    CreditAmount(meter: balance, color: color, stacked: narrow)
                         .frame(maxHeight: .infinity, alignment: .center)
                 } else {
                     HStack(alignment: .top, spacing: narrow ? 5 : 10) {
@@ -195,8 +207,9 @@ private struct CompactProviderCard: View {
             } else {
                 HStack(spacing: 5) {
                     Image(systemName: state == .notConnected ? "plus.circle" : "minus.circle")
-                    Text(statusText(state)).lineLimit(1)
-                }.font(.system(size: 10)).foregroundStyle(widgetMuted)
+                    Text(statusText(state)).lineLimit(narrow ? 2 : 1)
+                        .multilineTextAlignment(.leading)
+                }.font(.system(size: narrow ? 9 : 10)).foregroundStyle(widgetMuted)
                     .frame(maxHeight: .infinity, alignment: .center)
             }
         }
@@ -261,8 +274,8 @@ struct UsageOverview: View {
                 .accessibilityLabel(L10n.t("\(ready) providers with current readings"))
             }
             GeometryReader { geometry in
-                let columns = googleOnly ? 3 : 2
-                let rows = googleOnly ? 1 : 4
+                let columns = googleOnly || readings.count > 8 ? 3 : 2
+                let rows = max(1, (readings.count + columns - 1) / columns)
                 let gap: CGFloat = 7
                 let height = max(0, (geometry.size.height - CGFloat(rows - 1) * gap) / CGFloat(rows))
                 VStack(spacing: gap) {
@@ -270,7 +283,7 @@ struct UsageOverview: View {
                         HStack(spacing: gap) {
                             ForEach(Array(readings.dropFirst(row * columns).prefix(columns))) { reading in
                                 Link(destination: URL(string: "codenotch-usage://provider/\(reading.id)")!) {
-                                    CompactProviderCard(reading: reading, date: date, narrow: googleOnly)
+                                    CompactProviderCard(reading: reading, date: date, narrow: columns == 3)
                                 }.buttonStyle(.plain)
                             }
                         }.frame(height: height)
@@ -298,7 +311,7 @@ private struct UsageRing: View {
                     .rotationEffect(.degrees(-90))
             }
             VStack(spacing: 0) {
-                Text("\(Int((fraction * 100).rounded()))%")
+                Text("\(percentageNumber(fraction))%")
                     .font(.system(size: 24, weight: .semibold, design: .rounded)).monospacedDigit()
                 Text(caption).font(.system(size: 9, weight: .medium)).foregroundStyle(widgetMuted)
             }
@@ -352,7 +365,7 @@ struct SingleProviderView: View {
                             if family == .systemSmall, let secondary = reading.meters.dropFirst().first {
                                 HStack(spacing: 4) {
                                     Text(compactLabel(secondary)).foregroundStyle(widgetMuted)
-                                    Text(secondary.usedFraction.map { "\(Int(($0 * 100).rounded()))%" } ?? secondary.value)
+                                    Text(secondary.usedFraction.map { "\(percentageNumber($0))%" } ?? secondary.value)
                                         .foregroundStyle(color).monospacedDigit()
                                 }.font(.system(size: 9, weight: .medium))
                             } else {

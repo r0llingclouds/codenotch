@@ -3,13 +3,13 @@ import SwiftUI
 import WidgetKit
 
 enum UsageProviderChoice: String, AppEnum {
-    case codex, claude, kimi, glm, deepseek
+    case codex, claude, cursor, kimi, glm, deepseek
     case gemini = "gemini-chat"
     case notebooklm
     case flow = "google-flow"
     static var typeDisplayRepresentation: TypeDisplayRepresentation = "Provider"
     static var caseDisplayRepresentations: [Self: DisplayRepresentation] = [
-        .codex: "Codex", .claude: "Claude", .kimi: "Kimi", .glm: "GLM",
+        .codex: "Codex", .claude: "Claude", .cursor: "Cursor", .kimi: "Kimi", .glm: "GLM",
         .deepseek: "DeepSeek", .gemini: "Gemini chat", .notebooklm: "NotebookLM", .flow: "Google Flow"
     ]
 }
