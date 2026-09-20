@@ -110,6 +110,8 @@ final class UsageStore: ObservableObject {
 
     private let archive: UsageArchive
     private var lastGood: [String: (snapshot: ProviderSnapshot, fetchedAt: Date)] = [:]
+    var widgetMeasurementDates: [String: Date] { lastGood.mapValues(\.fetchedAt) }
+
     private var timer: Timer?
     private var localTimer: Timer?
     private var fetchTasks: [String: Task<Void, Never>] = [:]

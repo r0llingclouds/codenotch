@@ -46,6 +46,8 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
 
     @Published private(set) var outcome: Outcome = .idle
 
+    private var isPersonalFork: Bool { Bundle.main.object(forInfoDictionaryKey: "CodenotchPersonalFork") as? Bool == true }
+
     private lazy var controller = SPUStandardUpdaterController(
         startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil
     )
@@ -53,8 +55,9 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
     /// Mirrors the preference, so switching it off really does stop the checks
     /// rather than only hiding them.
     var automatic: Bool {
-        get { controller.updater.automaticallyChecksForUpdates }
+        get { isPersonalFork ? false : controller.updater.automaticallyChecksForUpdates }
         set {
+            guard !isPersonalFork else { return }
             controller.updater.automaticallyChecksForUpdates = newValue
             controller.updater.automaticallyDownloadsUpdates = newValue
         }
@@ -64,16 +67,20 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
     }
 
-    var lastChecked: Date? { controller.updater.lastUpdateCheckDate }
+    var lastChecked: Date? { isPersonalFork ? nil : controller.updater.lastUpdateCheckDate }
 
     /// Starts the scheduled checks. Deliberately not in `init`: the controller
     /// is lazy so that `self` exists before it is handed over as the delegate.
-    func start() { _ = controller }
+    func start() { if !isPersonalFork { _ = controller } }
 
     /// The manual path, for someone who does not want to wait for the schedule.
     /// This one *does* show UI — it was asked for, so silence would read as a
     /// broken button.
     func checkNow() {
+        guard !isPersonalFork else {
+            outcome = .failed(L10n.t("Personal fork: update from your GitHub checkout."))
+            return
+        }
         outcome = .checking
         controller.updater.checkForUpdates()
         // Never left on "Checking…". Sparkle reports every ending it knows

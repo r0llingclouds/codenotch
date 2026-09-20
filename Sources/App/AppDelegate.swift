@@ -5,6 +5,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notchFleet: NotchFleet?
     private var store: UsageStore?
+    private var widgetPublisher: WidgetSnapshotPublisher?
     var phoneLinkServer: PhoneLinkServer?
     var phoneLinkServerStatus: PhoneLinkServerStatus?
     var phoneLinkPairing: PhoneLinkPairing?
@@ -88,7 +89,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Before Preferences reads anything, or the first launch flag and
         // every choice would be read from an empty domain.
-        Preferences.migrateFromPreviousName()
+        if (Bundle.main.object(forInfoDictionaryKey: "CodenotchPersonalFork") as? Bool == true) {
+            UserDefaults.standard.register(defaults: [
+                "notchVisibility": "hidden", "appPresence": "menuBar",
+                "connectedProviders": UsageWidgetSnapshot.catalogue.map(\.id),
+                "providerOrder": UsageWidgetSnapshot.catalogue.map(\.id)
+            ])
+        } else { Preferences.migrateFromPreviousName() }
         let preferences = Preferences()
         self.preferences = preferences
 
@@ -122,8 +129,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Settings changes it, because the fetch URLs live on the site.
             let miniMaxWeb = WebSessionProvider(site: Sites.minimax(region: preferences.minimaxRegion))
             self.miniMaxWeb = miniMaxWeb
-            let webProviders: [WebSessionProvider] = [deepSeek, qianwen]
-            fleet.signInItems = [deepSeek, miniMaxWeb, qianwen].map { provider in
+            let googleProviders = GoogleUsagePages.sites.map { WebSessionProvider(site: $0) }
+            let webProviders: [WebSessionProvider] = [deepSeek, qianwen] + googleProviders
+            fleet.signInItems = (webProviders + [miniMaxWeb]).map { provider in
                 let name = provider.displayName
                 return (title: L10n.t("Sign in to \(name)…"),
                         action: { [weak provider] in provider?.presentSignIn() })
@@ -168,6 +176,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // order for a frame and then visibly shuffles.
                 order: preferences.providerOrder
             )
+            let widgetPublisher = WidgetSnapshotPublisher()
+            self.widgetPublisher = widgetPublisher
+            store.$snapshots
+                .debounce(for: .seconds(1), scheduler: RunLoop.main)
+                .sink { [weak store, weak widgetPublisher] snapshots in
+                    guard let store else { return }
+                    widgetPublisher?.publish(WidgetSnapshotPublisher.makeSnapshot(
+                        snapshots, disconnected: store.disconnected, dates: store.widgetMeasurementDates))
+                }.store(in: &cancellables)
+            for provider in googleProviders {
+                provider.onAuthenticated = { [weak store, weak provider] in
+                    guard let provider else { return }
+                    store?.providerAuthenticationChanged(providerID: provider.id)
+                }
+            }
             deepSeek.onAuthenticated = { [weak store] in
                 store?.providerAuthenticationChanged(providerID: "deepseek")
             }
@@ -950,6 +973,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                        hasVisibleWindows: Bool) -> Bool {
         openSettings()
         return true
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard urls.contains(where: { $0.scheme == "codenotch-usage" }) else { return }
+        openSettings()
     }
 
     @MainActor func openSettings() { settings?.show() }
