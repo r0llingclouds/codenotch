@@ -1,7 +1,7 @@
 import SwiftUI
 
-private let dashboardInk = Color(red: 0.93, green: 0.95, blue: 1)
-private let dashboardMuted = Color(red: 0.61, green: 0.66, blue: 0.76)
+let dashboardInk = Color(red: 0.93, green: 0.95, blue: 1)
+let dashboardMuted = Color(red: 0.61, green: 0.66, blue: 0.76)
 
 struct UsageDashboardView: View {
     @ObservedObject var model: UsageDashboardModel
@@ -18,12 +18,16 @@ struct UsageDashboardView: View {
                     overview(at: context.date, width: geometry.size.width)
                 }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if let reading = model.selectedReading {
+                if let reading = model.selectedReading, !model.showsHistory {
                     Rectangle().fill(.white.opacity(0.08)).frame(width: 1)
                     DashboardDetail(reading: reading, plan: model.plans[reading.id],
                                     date: context.date, refreshing: model.refreshing.contains(reading.id),
                                     refresh: { refreshProvider(reading.id) },
-                                    openSettings: openSettings, close: { model.select(nil) })
+                                    openSettings: openSettings, close: { model.select(nil) },
+                                    showHistory: {
+                                        model.history.selectProvider(reading.id)
+                                        model.showsHistory = true
+                                    })
                         .frame(width: 310)
                         .background(.black.opacity(0.14))
                 }
@@ -65,6 +69,18 @@ struct UsageDashboardView: View {
             .padding(.top, 24)
             .padding(.bottom, 26)
 
+            HStack(spacing: 16) {
+                Picker(L10n.t("Dashboard view"), selection: $model.showsHistory) {
+                    Label(L10n.t("Overview"), systemImage: "square.grid.2x2").tag(false)
+                    Label(L10n.t("History"), systemImage: "chart.xyaxis.line").tag(true)
+                }.pickerStyle(.segmented).labelsHidden().frame(width: 240)
+                Spacer()
+                HistoryRecordingBadge(model: model.history)
+            }.padding(.horizontal, 28).padding(.bottom, 18)
+
+            if model.showsHistory {
+                UsageHistoryView(model: model.history)
+            } else {
             ScrollView {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14),
                                         count: width >= 740 ? 3 : 2), spacing: 14) {
@@ -77,6 +93,7 @@ struct UsageDashboardView: View {
                 }
                 .padding(.horizontal, 28)
                 .padding(.bottom, 24)
+            }
             }
             HStack(spacing: 7) {
                 Image(systemName: model.refreshing.isEmpty ? "clock" : "arrow.clockwise")
@@ -242,6 +259,7 @@ private struct DashboardDetail: View {
     let refresh: () -> Void
     let openSettings: () -> Void
     let close: () -> Void
+    let showHistory: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -292,6 +310,9 @@ private struct DashboardDetail: View {
                 }.padding(.horizontal, 24).padding(.bottom, 24)
             }
             VStack(spacing: 10) {
+                Button(action: showHistory) {
+                    Label(L10n.t("View history"), systemImage: "chart.xyaxis.line").frame(maxWidth: .infinity)
+                }
                 Button(action: refresh) {
                     Label(refreshing ? L10n.t("Updating…") : L10n.t("Refresh reading"), systemImage: "arrow.clockwise")
                         .frame(maxWidth: .infinity)
@@ -303,7 +324,7 @@ private struct DashboardDetail: View {
     }
 }
 
-private struct DashboardBrand: View {
+struct DashboardBrand: View {
     let id: String
     let size: CGFloat
     var body: some View {

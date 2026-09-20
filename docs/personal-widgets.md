@@ -25,6 +25,36 @@ icon remains while the dashboard or Settings is open, then returns to the
 chosen app-presence setting. Opening the dashboard never adds another polling
 loop: the app and widgets share the same store and readings.
 
+## Local usage history
+
+The **History** tab records fresh successful readings from the existing store,
+without extra provider requests. It offers Today / 7 / 30 / 90 day ranges,
+an **All services** view with nine individual trend cards, an overlaid quota
+chart and daily activity across services. Select a card or provider for quota
+selection (including Claude Fable), a reading timeline, daily observed
+consumption and an activity calendar. The global view selects one labeled
+quota per service and counts services with observed activity; it never sums
+overlapping quotas or combines percentages, money and credits. DeepSeek remains a money
+balance; Flow remains credits. Export the selected series and period as CSV.
+
+Data is kept across app restarts in
+`~/Library/Application Support/Codenotch/History/usage.sqlite`, a private local
+SQLite database. There is no automatic history deletion or cloud upload. The
+database contains provider/meter labels, numerical readings, units, timestamps
+and reset dates, without credentials, account identifiers or conversation text.
+Recording continues with the dashboard closed while the background app runs,
+using the existing five-minute idle / one-minute active refresh schedule.
+
+History starts with the first fresh reading after this version is installed;
+the last-good cache is not retroactively turned into a time series. Missing
+days remain missing, and zero is only plotted when it was observed. The line
+breaks at changed reset windows and gaps over 15 minutes. Daily consumption is
+a conservative sum of observed changes between nearby readings in the same
+calendar day/window: the initial value, reset boundaries and offline gaps are
+excluded. Quota changes are percentage points, not tokens or billing totals;
+corrections are not counted twice, and balance refills do not count as spending.
+Calendar days follow the Mac's timezone, including daylight-saving changes.
+
 ## Widgets
 
 - **All AI usage** (large): Codex, Claude, Cursor, Kimi, GLM, DeepSeek, Gemini chat,

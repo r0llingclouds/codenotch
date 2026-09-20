@@ -181,7 +181,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             let widgetPublisher = WidgetSnapshotPublisher()
             self.widgetPublisher = widgetPublisher
-            let dashboardModel = UsageDashboardModel()
+            let history = UsageHistoryModel(url: UsageHistoryDatabase.defaultURL)
+            let dashboardModel = UsageDashboardModel(history: history)
+            store.onHistoryReading = { [weak history] snapshot, date in history?.record(snapshot, at: date) }
             Publishers.CombineLatest(store.$snapshots, store.$disconnected)
                 .debounce(for: .seconds(1), scheduler: RunLoop.main)
                 .sink { [weak store, weak widgetPublisher, weak dashboardModel] snapshots, disconnected in

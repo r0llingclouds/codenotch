@@ -25,6 +25,11 @@ enum UsageDashboardRoute: Equatable {
 /// selecting or closing it never creates a second polling loop.
 @MainActor
 final class UsageDashboardModel: ObservableObject {
+    let history: UsageHistoryModel
+    @Published var showsHistory = false
+
+    init(history: UsageHistoryModel? = nil) { self.history = history ?? UsageHistoryModel() }
+
     @Published var snapshot: UsageWidgetSnapshot = .empty
     @Published var refreshing: Set<String> = []
     @Published var plans: [String: String] = [:]

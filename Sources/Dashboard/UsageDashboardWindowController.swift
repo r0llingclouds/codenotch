@@ -25,6 +25,7 @@ final class UsageDashboardWindowController: NSObject, NSWindowDelegate {
 
     func show(providerID: String? = nil) {
         model.select(providerID)
+        if providerID != nil { model.showsHistory = false }
         if window == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 790),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
