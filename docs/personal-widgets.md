@@ -37,6 +37,12 @@ quota per service and counts services with observed activity; it never sums
 overlapping quotas or combines percentages, money and credits. DeepSeek remains a money
 balance; Flow remains credits. Export the selected series and period as CSV.
 
+Claude's provider history displays all its quota charts together, with Fable
+first, followed by session and all-model weekly usage. Each column has its own
+timeline, daily observed consumption and activity calendar. There is no Claude
+quota dropdown; the date range applies to every column and its CSV export
+includes all Claude series with their labels and values.
+
 Data is kept across app restarts in
 `~/Library/Application Support/Codenotch/History/usage.sqlite`, a private local
 SQLite database. There is no automatic history deletion or cloud upload. The

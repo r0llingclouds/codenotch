@@ -10,6 +10,7 @@ final class UsageHistoryModel: ObservableObject {
     @Published private(set) var chartPoints: [UsageHistoryChartPoint] = []
     @Published private(set) var trends: [UsageHistoryTrend] = []
     @Published private(set) var globalDays: [UsageHistoryDay] = []
+    @Published private(set) var providerTrends: [UsageHistoryTrend] = []
     @Published private(set) var isLoading = false
     @Published private(set) var error: String?
     @Published var providerID = "all" { didSet { if oldValue != providerID { selectionChanged() } } }
@@ -27,10 +28,13 @@ final class UsageHistoryModel: ObservableObject {
     }
 
     var availableSeries: [UsageHistorySeries] {
-        catalogue.filter { $0.providerID == providerID }.sorted {
-            if $0.isFable != $1.isFable { return $0.isFable }
-            return $0.meterID < $1.meterID
-        }
+        catalogue.filter { $0.providerID == providerID }.sorted(by: UsageHistorySeries.displayOrder)
+    }
+    var showsAllQuotas: Bool { providerID == "claude" }
+    var exportableTrends: [UsageHistoryTrend] {
+        if showsAllQuotas { return providerTrends.filter { !$0.points.isEmpty } }
+        guard let series = selectedSeries, !points.isEmpty else { return [] }
+        return [UsageHistoryTrend(series: series, points: points, days: days, chartPoints: chartPoints)]
     }
     var selectedSeries: UsageHistorySeries? { availableSeries.first { $0.id == seriesID } }
     var firstRecordedAt: Date? { catalogue.map(\.firstAt).min() }
@@ -58,7 +62,7 @@ final class UsageHistoryModel: ObservableObject {
     private func selectionChanged() {
         guard !selecting else { return }
         // Never briefly display the previous provider's numbers with new units.
-        points = []; chartPoints = []; days = []; trends = []; globalDays = []
+        points = []; chartPoints = []; days = []; trends = []; globalDays = []; providerTrends = []
         reload()
     }
 
@@ -74,7 +78,7 @@ final class UsageHistoryModel: ObservableObject {
         loadTask = Task {
             do {
                 let catalogue = try await database.catalogue()
-                let available = catalogue.filter { $0.providerID == provider }
+                let available = catalogue.filter { $0.providerID == provider }.sorted(by: UsageHistorySeries.displayOrder)
                 let selected = available.first { $0.id == requestedSeries }
                     ?? available.first { $0.isFable } ?? available.first
                 let points: [UsageHistoryPoint]
@@ -91,6 +95,18 @@ final class UsageHistoryModel: ObservableObject {
                             chartPoints: UsageHistoryAnalysis.chartPoints(readings, limit: 240)))
                     }
                 }
+                var providerTrends: [UsageHistoryTrend] = []
+                if provider == "claude" {
+                    for series in available {
+                        guard !Task.isCancelled else { return }
+                        let readings: [UsageHistoryPoint]
+                        if series.id == selected?.id { readings = points }
+                        else { readings = try await database.points(for: series.id, from: since, through: now) }
+                        providerTrends.append(UsageHistoryTrend(series: series, points: readings,
+                            days: UsageHistoryAnalysis.daily(readings, kind: series.kind, from: since, through: now, calendar: calendar),
+                            chartPoints: UsageHistoryAnalysis.chartPoints(readings)))
+                    }
+                }
                 guard !Task.isCancelled else { return }
                 self.catalogue = catalogue
                 selecting = true
@@ -100,6 +116,7 @@ final class UsageHistoryModel: ObservableObject {
                 self.chartPoints = UsageHistoryAnalysis.chartPoints(points)
                 self.trends = trends
                 self.globalDays = UsageHistoryGlobal.activity(trends, from: since, through: now, calendar: calendar)
+                self.providerTrends = providerTrends
                 self.days = UsageHistoryAnalysis.daily(points, kind: selected?.kind ?? .quota,
                     from: since, through: now, calendar: calendar)
                 start = since; end = now
@@ -117,19 +134,13 @@ final class UsageHistoryModel: ObservableObject {
     }
 
     func exportCSV() {
-        guard let series = selectedSeries, !points.isEmpty else { return }
+        let entries = exportableTrends
+        guard let series = entries.first?.series else { return }
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "codenotch-\(series.providerID)-\(series.meterID).csv"
+        panel.nameFieldStringValue = showsAllQuotas ? "codenotch-claude-history.csv" : "codenotch-\(series.providerID)-\(series.meterID).csv"
         panel.allowedContentTypes = [.commaSeparatedText]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let formatter = ISO8601DateFormatter()
-        func cell(_ value: String) -> String { "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
-        var lines = ["date,provider,meter,unit,value,resets_at"]
-        lines += points.map { point in
-            [formatter.string(from: point.date), series.providerID, series.meterID, series.unit,
-             String(point.value), point.resetsAt.map(formatter.string) ?? ""].map(cell).joined(separator: ",")
-        }
-        do { try (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8) }
+        do { try UsageHistoryCSV.encode(entries).write(to: url, atomically: true, encoding: .utf8) }
         catch { self.error = L10n.t("The CSV could not be saved to the selected location.") }
     }
 }

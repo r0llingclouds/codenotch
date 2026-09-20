@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import Codenotch
 
@@ -189,5 +190,67 @@ final class UsageHistoryTests: XCTestCase {
         let fresh = UsageHistoryRecord.readings(from: snapshot([LimitWindow(id: "weekly_scoped", label: "Fable 5.1", usedFraction: 0.1)]), at: day.addingTimeInterval(3600))
         let chosen = UsageHistoryGlobal.primarySeries(providerID: "claude", catalogue: (old + fresh).map(\.series))
         XCTAssertEqual(chosen?.label, "Fable 5.1")
+    }
+
+    @MainActor
+    func testClaudeLoadsEveryQuotaTogetherAndAppliesRangeToAllCharts() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("history.sqlite")
+        let database = UsageHistoryDatabase(url: url)
+        let now = Date().addingTimeInterval(-60)
+        let earlier = Calendar.current.date(byAdding: .day, value: -10, to: now)!
+        let reading = snapshot([
+            LimitWindow(id: "weekly_all", label: "All models", usedFraction: 0.19),
+            LimitWindow(id: "session", label: "Current session", usedFraction: 0.12),
+            LimitWindow(id: "weekly_scoped", label: "Fable", usedFraction: 0.26)])
+        try await database.append(UsageHistoryRecord.readings(from: reading, at: earlier))
+        try await database.append(UsageHistoryRecord.readings(from: reading, at: now))
+        let model = UsageHistoryModel(url: url)
+        let loaded = expectation(description: "All Claude quotas loaded")
+        let subscription = model.$isLoading.dropFirst().filter { !$0 }.first().sink { _ in loaded.fulfill() }
+        defer { subscription.cancel() }
+        model.selectProvider("claude")
+        await fulfillment(of: [loaded], timeout: 5)
+        XCTAssertNil(model.error)
+        XCTAssertTrue(model.showsAllQuotas)
+        XCTAssertEqual(model.providerTrends.map(\.series.meterID), ["weekly_scoped", "session", "weekly_all"])
+        XCTAssertEqual(Set(model.providerTrends.map(\.series.id)).count, 3)
+        XCTAssertEqual(model.providerTrends.map { $0.points.count }, [2, 2, 2])
+        XCTAssertEqual(model.exportableTrends.count, 3)
+        XCTAssertEqual(model.providerTrends.compactMap { $0.points.last?.value }, [26, 12, 19])
+
+        let narrowed = expectation(description: "Date range applied to every quota")
+        let rangeSubscription = model.$isLoading.dropFirst().filter { !$0 }.first().sink { _ in narrowed.fulfill() }
+        defer { rangeSubscription.cancel() }
+        model.range = 7
+        await fulfillment(of: [narrowed], timeout: 5)
+        XCTAssertEqual(model.providerTrends.map { $0.points.count }, [1, 1, 1])
+        XCTAssertEqual(model.providerTrends.map { $0.days.count }, [7, 7, 7])
+        model.selectProvider("deepseek")
+        XCTAssertFalse(model.showsAllQuotas)
+        XCTAssertTrue(model.providerTrends.isEmpty, "Switching provider clears the Claude charts immediately")
+    }
+
+    func testClaudeCSVIncludesEveryQuotaAndItsOwnValues() {
+        let records = UsageHistoryRecord.readings(from: snapshot([
+            LimitWindow(id: "session", label: "Current session", usedFraction: 0.12),
+            LimitWindow(id: "weekly_all", label: "All models", usedFraction: 0.19),
+            LimitWindow(id: "weekly_scoped", label: "Fable", usedFraction: 0.26)]), at: day)
+        let trends = records.map { UsageHistoryTrend(series: $0.series, points: [$0.point], days: [], chartPoints: []) }
+        let csv = UsageHistoryCSV.encode(trends)
+        XCTAssertEqual(csv.split(separator: "\n").count, 4)
+        XCTAssertTrue(csv.contains("\"session\",\"Current session\",\"%\",\"12.0\""))
+        XCTAssertTrue(csv.contains("\"weekly_all\",\"All models\",\"%\",\"19.0\""))
+        XCTAssertTrue(csv.contains("\"weekly_scoped\",\"Fable\",\"%\",\"26.0\""))
+    }
+
+    func testSingleBalanceCSVPreservesMoneyAndEscapesLabels() throws {
+        let record = try XCTUnwrap(UsageHistoryRecord.readings(from: snapshot([
+            LimitWindow(id: "spend", label: "Balance, \"USD\"", money: UsageMoneyBreakdown(currency: "USD", spent: 10, remaining: 49.99))
+        ], id: "deepseek"), at: day).first)
+        let csv = UsageHistoryCSV.encode([UsageHistoryTrend(series: record.series, points: [record.point], days: [], chartPoints: [])])
+        XCTAssertEqual(csv.split(separator: "\n").count, 2)
+        XCTAssertTrue(csv.contains("\"Balance, \"\"USD\"\"\",\"USD\",\"49.99\""))
     }
 }

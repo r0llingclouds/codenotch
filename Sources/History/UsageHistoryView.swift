@@ -32,6 +32,8 @@ struct UsageHistoryView: View {
                 }
                 if model.providerID == "all" {
                     UsageHistoryGlobalView(model: model)
+                } else if model.showsAllQuotas {
+                    UsageHistoryClaudeView(model: model)
                 } else {
                     summary
                     evolution
@@ -90,7 +92,7 @@ struct UsageHistoryView: View {
                 }
             }
             Spacer(minLength: 5)
-            if !model.availableSeries.isEmpty {
+            if !model.showsAllQuotas && !model.availableSeries.isEmpty {
                 Picker(L10n.t("Quota or balance"), selection: $model.seriesID) {
                     ForEach(model.availableSeries) { series in Text(series.label).tag(series.id) }
                 }.labelsHidden().frame(maxWidth: 170)
@@ -103,8 +105,9 @@ struct UsageHistoryView: View {
             }.pickerStyle(.segmented).labelsHidden().frame(width: 220)
             if model.providerID != "all" {
               Button(action: model.exportCSV) { Image(systemName: "square.and.arrow.up") }
-                .help(L10n.t("Export this series as CSV")).accessibilityLabel(L10n.t("Export CSV"))
-                .disabled(model.points.isEmpty)
+                .help(model.showsAllQuotas ? L10n.t("Export all Claude quotas as CSV") : L10n.t("Export this series as CSV"))
+                .accessibilityLabel(L10n.t("Export CSV"))
+                .disabled(model.exportableTrends.isEmpty)
             }
         }
     }
@@ -244,7 +247,7 @@ struct HistoryStat: View {
     }
 }
 
-private struct HistoryEvolutionChart: View {
+struct HistoryEvolutionChart: View {
     let points: [UsageHistoryChartPoint]
     let quota: Bool
     let start: Date

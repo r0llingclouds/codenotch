@@ -46,10 +46,32 @@ enum UsageHistoryGlobal {
 }
 
 extension UsageHistorySeries {
+    static func displayOrder(_ lhs: Self, _ rhs: Self) -> Bool {
+        if lhs.isFable != rhs.isFable { return lhs.isFable }
+        if lhs.meterID != rhs.meterID { return lhs.meterID < rhs.meterID }
+        return lhs.label < rhs.label
+    }
+
     func formatted(_ value: Double?, delta: Bool = false) -> String {
         guard let value else { return "—" }
         let number = value.formatted(.number.precision(.fractionLength(0...(kind == .balance ? 2 : 1))))
         let suffix = kind == .quota && delta ? L10n.t("pp") : unit
         return "\(number) \(suffix == "credits" ? L10n.t("credits") : suffix)"
+    }
+}
+
+enum UsageHistoryCSV {
+    static func encode(_ trends: [UsageHistoryTrend]) -> String {
+        let formatter = ISO8601DateFormatter()
+        func cell(_ value: String) -> String { "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
+        var lines = ["date,provider,meter,label,unit,value,resets_at"]
+        for trend in trends {
+            lines += trend.points.map { point in
+                [formatter.string(from: point.date), trend.series.providerID, trend.series.meterID,
+                 trend.series.label, trend.series.unit, String(point.value),
+                 point.resetsAt.map(formatter.string) ?? ""].map(cell).joined(separator: ",")
+            }
+        }
+        return lines.joined(separator: "\n") + "\n"
     }
 }
