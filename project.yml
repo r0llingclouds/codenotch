@@ -18,7 +18,7 @@ settings:
     # silently pins every build to one version, so no customer ever sees an
     # update. Bump CURRENT_PROJECT_VERSION on every release.
     MARKETING_VERSION: "1.16.0"
-    CURRENT_PROJECT_VERSION: "22"
+    CURRENT_PROJECT_VERSION: "23"
     # Personal builds are ad-hoc signed. A stable development identity can
     # be supplied locally to retain Keychain approval across rebuilds.
     CODE_SIGN_IDENTITY: "-"

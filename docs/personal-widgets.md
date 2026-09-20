@@ -13,6 +13,8 @@ balances, status and measurement dates. Upstream Codenotch remains MIT licensed.
   and Flow. Antigravity and Gemini API quotas do not represent these products.
 
 The overview displays all nine providers in a three-column grid.
+Its compact header shows only the title; the branding and aggregate readiness
+counter are omitted so the usage cards have more vertical space.
 The widget design uses a dark blue background, provider marks, compact colored
 cards and larger usage figures. Individual provider widgets use a circular main
 meter; the small size also retains the second quota, and the medium size shows
@@ -146,3 +148,8 @@ including a second expiry using the rotated refresh token. The earlier local
 Xcode loader/symbolicator stall was avoided with products under `/tmp` and
 `ENABLE_DEBUG_DYLIB=NO DEBUG_INFORMATION_FORMAT=dwarf-with-dsym`; no system
 security settings were changed.
+
+Build 23 removes the overview branding and readiness badge, compacts the title
+and gives the cards more height. Native renders of the large overview and
+Google widget were inspected; the complete suite passed 1,730 tests with three
+skipped and zero failures.

@@ -251,28 +251,10 @@ struct UsageOverview: View {
     var googleOnly = false
     var body: some View {
         let readings = snapshot.providers.filter { !googleOnly || ["gemini-chat", "notebooklm", "google-flow"].contains($0.id) }
-        let ready = readings.filter { $0.effectiveState(at: date) == .ready }.count
-        VStack(alignment: .leading, spacing: googleOnly ? 9 : 11) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("CODENOTCH").font(.system(size: 7, weight: .bold, design: .rounded))
-                        .tracking(2).foregroundStyle(widgetMuted)
-                    Text(googleOnly ? "Google AI Pro" : L10n.t("AI usage"))
-                        .font(.system(size: googleOnly ? 17 : 20, weight: .semibold, design: .rounded))
-                        .tracking(-0.5)
-                }
-                Spacer()
-                HStack(spacing: 4) {
-                    Circle().fill(ready == readings.count ? Color(red: 0.44, green: 0.86, blue: 0.72) : Color.orange)
-                        .frame(width: 4, height: 4)
-                    Text("\(ready)/\(readings.count)").monospacedDigit()
-                }
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(widgetMuted)
-                .padding(.horizontal, 8).padding(.vertical, 5)
-                .background(.white.opacity(0.04), in: Capsule())
-                .accessibilityLabel(L10n.t("\(ready) providers with current readings"))
-            }
+        VStack(alignment: .leading, spacing: 8) {
+            Text(googleOnly ? "Google AI Pro" : L10n.t("AI usage"))
+                .font(.system(size: googleOnly ? 17 : 18, weight: .semibold, design: .rounded))
+                .tracking(-0.5)
             GeometryReader { geometry in
                 let columns = googleOnly || readings.count > 8 ? 3 : 2
                 let rows = max(1, (readings.count + columns - 1) / columns)
