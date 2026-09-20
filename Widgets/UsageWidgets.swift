@@ -82,118 +82,6 @@ struct ProviderTimeline: AppIntentTimelineProvider {
     }
 }
 
-struct ProviderTile: View {
-    @Environment(\.widgetFamily) private var family
-    let reading: WidgetProviderReading
-    let date: Date
-    var detailed = false
-
-    var tint: Color {
-        switch reading.id {
-        case "claude": return .orange
-        case "codex": return .green
-        case "kimi": return .purple
-        case "glm": return .cyan
-        case "deepseek": return .blue
-        case "gemini-chat": return .indigo
-        case "notebooklm": return .teal
-        default: return .pink
-        }
-    }
-    var state: WidgetProviderReading.State { reading.effectiveState(at: date) }
-    var statusText: String {
-        switch state {
-        case .ready: return ""
-        case .stale: return "Out of date"
-        case .notConnected: return "Connect account"
-        case .disabled: return "Enable in app"
-        case .unavailable: return "Usage unavailable"
-        }
-    }
-    var body: some View {
-        VStack(alignment: .leading, spacing: detailed ? 9 : 5) {
-            HStack(spacing: 5) {
-                Circle().fill(tint).frame(width: 6, height: 6)
-                Text(reading.name).font(.system(size: detailed ? 15 : 12, weight: .semibold))
-                Spacer(minLength: 0)
-                if state == .stale { Image(systemName: "clock.badge.exclamationmark").font(.caption2).foregroundStyle(.secondary) }
-            }
-            if !reading.meters.isEmpty && (state == .ready || state == .stale) {
-                ForEach(Array(reading.meters.prefix(detailed && family != .systemSmall ? 3 : 2))) { meter in
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 3) {
-                            Text(meter.label).lineLimit(1)
-                            Spacer(minLength: 1)
-                            if let fraction = meter.usedFraction {
-                                Text("\(Int((fraction * 100).rounded()))% used").monospacedDigit().foregroundStyle(.primary)
-                            }
-                        }.font(.system(size: detailed ? 11 : 9)).foregroundStyle(.secondary)
-                        if let fraction = meter.usedFraction {
-                            GeometryReader { geometry in
-                                ZStack(alignment: .leading) {
-                                    Capsule().fill(tint.opacity(0.13))
-                                    Capsule().fill(fraction >= 0.9 ? Color.red : tint)
-                                        .frame(width: geometry.size.width * min(max(fraction, 0), 1))
-                                }
-                            }.frame(height: detailed ? 5 : 3)
-                        } else {
-                            Text(meter.value).font(.system(size: detailed ? 17 : 11, weight: .medium)).lineLimit(1).minimumScaleFactor(0.65)
-                        }
-                        if detailed, let reset = meter.resetsAt {
-                            if reset > date {
-                                HStack(spacing: 3) { Text("Resets"); Text(reset, style: .relative) }
-                                    .font(.system(size: 10)).foregroundStyle(.secondary)
-                            } else {
-                                Text("Reset due · refresh needed").font(.system(size: 10)).foregroundStyle(.secondary)
-                            }
-                        } else if detailed, let reset = meter.resetDescription, !reset.isEmpty {
-                            Text(reset).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2)
-                        }
-                    }
-                }
-            } else {
-                Text(statusText).font(.system(size: detailed ? 12 : 10)).foregroundStyle(.secondary)
-                if detailed { Text("Open Codenotch to connect and refresh.").font(.caption2).foregroundStyle(.secondary) }
-            }
-            if detailed, let measured = reading.measuredAt {
-                HStack(spacing: 3) { Text(state == .stale ? "Last reading" : "Updated"); Text(measured, style: .relative) }
-                    .font(.system(size: 9)).foregroundStyle(.secondary)
-            }
-        }.frame(maxWidth: .infinity, alignment: .topLeading)
-    }
-}
-
-struct OverviewView: View {
-    let entry: UsageEntry
-    var googleOnly = false
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label(googleOnly ? "Google AI Pro" : "AI Usage", systemImage: "chart.bar.xaxis")
-                    .font(.system(size: 14, weight: .semibold))
-                Spacer()
-                Text("CODENOTCH").font(.system(size: 8, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
-            }
-            let readings = entry.snapshot.providers.filter { !googleOnly || ["gemini-chat", "notebooklm", "google-flow"].contains($0.id) }
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .top), count: googleOnly ? 3 : 2), alignment: .leading, spacing: 14) {
-                ForEach(readings) { reading in
-                    Link(destination: URL(string: "codenotch-usage://provider/\(reading.id)")!) {
-                        ProviderTile(reading: reading, date: entry.date)
-                    }.buttonStyle(.plain)
-                }
-            }
-            Spacer(minLength: 0)
-            HStack(spacing: 3) {
-                if entry.snapshot.generatedAt == .distantPast { Text("Open Codenotch to get started") }
-                else { Text("Updated"); Text(entry.snapshot.generatedAt, style: .relative) }
-                Spacer()
-                Image(systemName: "arrow.up.right")
-            }.font(.system(size: 9)).foregroundStyle(.secondary)
-        }.containerBackground(.background, for: .widget)
-            .widgetURL(URL(string: "codenotch-usage://settings"))
-    }
-}
-
 @main
 struct UsageWidgets: WidgetBundle {
     var body: some Widget {
@@ -205,7 +93,12 @@ struct UsageWidgets: WidgetBundle {
 
 struct AllUsageWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "CodenotchAllUsage", provider: OverviewTimeline()) { OverviewView(entry: $0) }
+        StaticConfiguration(kind: "CodenotchAllUsage", provider: OverviewTimeline()) { entry in
+            UsageOverview(snapshot: entry.snapshot, date: entry.date)
+                .containerBackground(for: .widget) { WidgetBackdrop() }
+                .widgetURL(URL(string: "codenotch-usage://settings"))
+        }
+            .contentMarginsDisabled()
             .configurationDisplayName("All AI usage")
             .description("Your subscriptions and DeepSeek balance in one view.")
             .supportedFamilies([.systemLarge])
@@ -214,7 +107,12 @@ struct AllUsageWidget: Widget {
 
 struct GoogleUsageWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "CodenotchGoogleUsage", provider: OverviewTimeline()) { OverviewView(entry: $0, googleOnly: true) }
+        StaticConfiguration(kind: "CodenotchGoogleUsage", provider: OverviewTimeline()) { entry in
+            UsageOverview(snapshot: entry.snapshot, date: entry.date, googleOnly: true)
+                .containerBackground(for: .widget) { WidgetBackdrop() }
+                .widgetURL(URL(string: "codenotch-usage://settings"))
+        }
+            .contentMarginsDisabled()
             .configurationDisplayName("Google AI Pro")
             .description("Gemini chat, NotebookLM and Flow as separate allowances.")
             .supportedFamilies([.systemMedium])
@@ -226,12 +124,20 @@ struct OneProviderWidget: Widget {
         AppIntentConfiguration(kind: "CodenotchProviderUsage", intent: ProviderWidgetIntent.self, provider: ProviderTimeline()) { entry in
             let reading = entry.snapshot.providers.first { $0.id == entry.providerID }
                 ?? UsageWidgetSnapshot.empty.providers.first { $0.id == entry.providerID }!
-            ProviderTile(reading: reading, date: entry.date, detailed: true)
-                .containerBackground(.background, for: .widget)
+            ProviderWidgetContent(reading: reading, date: entry.date)
+                .containerBackground(for: .widget) { WidgetBackdrop() }
                 .widgetURL(URL(string: "codenotch-usage://provider/\(entry.providerID)"))
         }
+        .contentMarginsDisabled()
         .configurationDisplayName("Provider usage")
         .description("Pin one provider’s limits, balance and reset times.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
+}
+
+private struct ProviderWidgetContent: View {
+    @Environment(\.widgetFamily) private var family
+    let reading: WidgetProviderReading
+    let date: Date
+    var body: some View { SingleProviderView(reading: reading, date: date, family: family) }
 }

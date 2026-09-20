@@ -18,7 +18,7 @@ settings:
     # silently pins every build to one version, so no customer ever sees an
     # update. Bump CURRENT_PROJECT_VERSION on every release.
     MARKETING_VERSION: "1.16.0"
-    CURRENT_PROJECT_VERSION: "19"
+    CURRENT_PROJECT_VERSION: "20"
     # Personal builds are ad-hoc signed. A stable development identity can
     # be supplied locally to retain Keychain approval across rebuilds.
     CODE_SIGN_IDENTITY: "-"
@@ -140,6 +140,11 @@ targets:
       - path: Widgets
         excludes: ["*.entitlements", "Info.plist"]
       - path: Shared
+      - path: Sources/Providers/GlyphOutline.swift
+      - path: Sources/Assets.xcassets
+      - path: Sources/L10n.swift
+      - path: Sources/Settings/AppLanguage.swift
+      - path: Sources/Localizable.xcstrings
     info:
       path: Widgets/Info.plist
       properties:

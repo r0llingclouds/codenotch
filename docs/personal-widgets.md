@@ -12,6 +12,12 @@ balances, status and measurement dates. Upstream Codenotch remains MIT licensed.
 - **Google AI Pro** (medium): three separate meters for Gemini chat, NotebookLM
   and Flow. Antigravity and Gemini API quotas do not represent these products.
 
+The widget design uses a dark blue background, provider marks, compact colored
+cards and larger usage figures. Individual provider widgets use a circular main
+meter; the small size also retains the second quota, and the medium size shows
+up to three. Credit balances remain amounts rather than percentage gauges.
+Missing and stale readings keep their explicit status.
+
 The floating notch is hidden by default in this fork. Codenotch remains in the
 menu bar for sign-in, refresh and settings. Close settings to leave collection
 running. Quit the app to stop it. No login item is installed automatically.
@@ -105,3 +111,10 @@ OpenCode and Flow's credit balance. The Gemini and NotebookLM quota panels and
 Flow's account credit panel were inspected in the app. The app passed 1,711
 local tests (three skipped), followed by 26 focused tests covering the final
 provider and credential changes.
+
+For visual checks, `Scripts/render-widgets.swift` renders the actual SwiftUI
+views at desktop widget sizes from a normalized snapshot JSON. Keep generated
+images and snapshots under the ignored `build/` directory; they can contain
+personal usage and balances. The redesigned widgets were checked in all four
+sizes/layouts and in the unconnected state. The complete suite passed again:
+1,714 tests, three skipped, zero failures.
