@@ -6,6 +6,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notchFleet: NotchFleet?
     private var store: UsageStore?
     private var widgetPublisher: WidgetSnapshotPublisher?
+    private var dashboard: UsageDashboardWindowController?
+    private var pendingDashboardRoute: UsageDashboardRoute?
+    private var didPresentDashboardRoute = false
     var phoneLinkServer: PhoneLinkServer?
     var phoneLinkServerStatus: PhoneLinkServerStatus?
     var phoneLinkPairing: PhoneLinkPairing?
@@ -178,13 +181,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             let widgetPublisher = WidgetSnapshotPublisher()
             self.widgetPublisher = widgetPublisher
-            store.$snapshots
+            let dashboardModel = UsageDashboardModel()
+            Publishers.CombineLatest(store.$snapshots, store.$disconnected)
                 .debounce(for: .seconds(1), scheduler: RunLoop.main)
-                .sink { [weak store, weak widgetPublisher] snapshots in
+                .sink { [weak store, weak widgetPublisher, weak dashboardModel] snapshots, disconnected in
                     guard let store else { return }
-                    widgetPublisher?.publish(WidgetSnapshotPublisher.makeSnapshot(
-                        snapshots, disconnected: store.disconnected, dates: store.widgetMeasurementDates))
+                    let snapshot = WidgetSnapshotPublisher.makeSnapshot(
+                        snapshots, disconnected: disconnected, dates: store.widgetMeasurementDates)
+                    widgetPublisher?.publish(snapshot)
+                    dashboardModel?.snapshot = snapshot
+                    dashboardModel?.plans = Dictionary(uniqueKeysWithValues: snapshots.compactMap {
+                        guard !disconnected.contains($0.id), let plan = $0.plan else { return nil }
+                        return ($0.id, plan)
+                    })
                 }.store(in: &cancellables)
+            store.$refreshing
+                .receive(on: RunLoop.main)
+                .sink { [weak dashboardModel] in dashboardModel?.refreshing = $0 }
+                .store(in: &cancellables)
             for provider in googleProviders {
                 provider.onAuthenticated = { [weak store, weak provider] in
                     guard let provider else { return }
@@ -376,6 +390,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { _ = await SessionFocus.focus(pid: pid) }
             }
             self.settings = settings
+            let dashboard = UsageDashboardWindowController(
+                model: dashboardModel, preferences: preferences,
+                refreshAll: { [weak store] in store?.refreshNow() },
+                refreshProvider: { [weak store] in store?.refresh(providerID: $0) },
+                openSettings: { [weak settings] in settings?.show() })
+            self.dashboard = dashboard
+            dashboard.keepRegularPresence = { [weak settings] in settings?.isVisible == true }
+            settings.keepRegularPresence = { [weak dashboard] in dashboard?.isVisible == true }
 
             // What changed, once per version — including on a fresh install,
             // where it is the introduction.
@@ -384,16 +406,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             self.whatsNew = whatsNew
 
-            // An agent app has no dock icon and no window: installed and
-            // launched, it shows four empty rings on a screen edge and no
-            // reason to look at them. Once, on the very first run, it opens the
-            // one place that explains what to connect.
-            //
-            // Sequenced behind What's New rather than beside it: two windows
-            // arriving together is one to dismiss before you can read either.
-            let introduce = { [weak settings] in
-                guard preferences.isFirstLaunch else { return }
-                settings?.show()
+            // Show one destination after the introduction. A widget link may
+            // arrive before the store and its windows have been constructed.
+            let introduce = { [weak self] in
+                guard let self, !self.didPresentDashboardRoute else { return }
+                let route = self.pendingDashboardRoute ?? .overview
+                self.pendingDashboardRoute = nil
+                self.openDashboardRoute(route)
             }
             whatsNew.onDismiss = introduce
             if !whatsNew.showIfNeeded() {
@@ -402,6 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let statusItem = StatusItemController { [weak settings] in settings?.show() }
             self.statusItem = statusItem
+            statusItem.onOpenDashboard = { [weak self] in self?.openDashboard() }
             statusItem.onRefreshProvider = { [weak store] id in store?.refresh(providerID: id) }
             statusItem.onRefreshAll = { [weak store] in store?.refreshNow() }
             // Read when the menu opens, so a model's line is as current as its cell.
@@ -415,8 +435,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             preferences.$appPresence
                 .receive(on: RunLoop.main)
-                .sink { presence in
-                    NSApp.setActivationPolicy(presence.activationPolicy)
+                .sink { [weak dashboard, weak settings] presence in
+                    let hasWindow = dashboard?.isVisible == true || settings?.isVisible == true
+                    NSApp.setActivationPolicy(hasWindow ? .regular : presence.activationPolicy)
                     if presence.wantsStatusItem { statusItem.show() } else { statusItem.hide() }
                 }
                 .store(in: &cancellables)
@@ -954,11 +975,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.showResetAlert(demo, duration: 6.0)
     }
 
-    /// Closing the settings window must not take the app with it.
-    ///
-    /// The default for a Dock app is to quit once its last window closes, which
-    /// here would kill the notch — the part that is actually the product —
-    /// every time someone shut the settings they had just opened.
+    /// Both native windows may close while the background store continues to
+    /// feed the widgets, menu bar and optional notch.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
@@ -968,16 +986,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// With no dock icon, no menu bar item and no notch on screen, there is
     /// otherwise nothing left to click — choosing Hide would be a one-way door.
     /// Launching the app again while it is already running lands here, so
-    /// opening it from Applications or Spotlight reopens settings.
+    /// opening it from Applications or Spotlight brings back the dashboard.
     func applicationShouldHandleReopen(_ sender: NSApplication,
                                        hasVisibleWindows: Bool) -> Bool {
-        openSettings()
+        openDashboard()
         return true
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard urls.contains(where: { $0.scheme == "codenotch-usage" }) else { return }
-        openSettings()
+        guard let route = urls.compactMap({ UsageDashboardRoute(url: $0) }).last else { return }
+        openDashboardRoute(route)
+    }
+
+    @MainActor private func openDashboardRoute(_ route: UsageDashboardRoute) {
+        guard dashboard != nil else { pendingDashboardRoute = route; return }
+        didPresentDashboardRoute = true
+        switch route {
+        case .overview: openDashboard()
+        case .provider(let id): dashboard?.show(providerID: id)
+        case .settings: openSettings()
+        }
+    }
+
+    @MainActor func openDashboard() {
+        guard let dashboard else { pendingDashboardRoute = .overview; return }
+        didPresentDashboardRoute = true
+        dashboard.show()
     }
 
     @MainActor func openSettings() { settings?.show() }

@@ -1,8 +1,26 @@
-# Personal usage widgets
+# Personal usage dashboard and widgets
 
-This fork adds native WidgetKit widgets to Codenotch. The background app reads
+This fork adds a native SwiftUI dashboard and WidgetKit widgets to Codenotch. The background app reads
 provider usage; the widget extension only receives normalized quota windows,
 balances, status and measurement dates. Upstream Codenotch remains MIT licensed.
+
+## Native app
+
+Open Codenotch from Applications or Spotlight to see all nine services in one
+resizable window. Select a card to open its details alongside the overview:
+every reported quota, balance, reset date and last measurement. Unavailable or
+stale readings stay explicitly marked. The app only names a plan when the
+provider supplies it, and explains the scope of each service's readings.
+
+Use **Refresh** (⌘R) for all providers, **Refresh reading** for the selected one,
+or **Manage accounts** to open the existing account settings. The menu bar's
+**Open AI Usage** (⌘1) also brings the dashboard forward. A widget card opens
+that service's details; the widget background opens the overview.
+
+Closing the window (⌘W) leaves usage collection and widgets running. The Dock
+icon remains while the dashboard or Settings is open, then returns to the
+chosen app-presence setting. Opening the dashboard never adds another polling
+loop: the app and widgets share the same store and readings.
 
 ## Widgets
 
@@ -22,7 +40,7 @@ up to three. Credit balances remain amounts rather than percentage gauges.
 Missing and stale readings keep their explicit status.
 
 The floating notch is hidden by default in this fork. Codenotch remains in the
-menu bar for sign-in, refresh and settings. Close settings to leave collection
+menu bar for the dashboard, sign-in, refresh and settings. Close the windows to leave collection
 running. Quit the app to stop it. No login item is installed automatically.
 
 ## Build and install

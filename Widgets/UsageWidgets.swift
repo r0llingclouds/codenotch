@@ -96,7 +96,7 @@ struct AllUsageWidget: Widget {
         StaticConfiguration(kind: "CodenotchAllUsage", provider: OverviewTimeline()) { entry in
             UsageOverview(snapshot: entry.snapshot, date: entry.date)
                 .containerBackground(for: .widget) { WidgetBackdrop() }
-                .widgetURL(URL(string: "codenotch-usage://settings"))
+                .widgetURL(URL(string: "codenotch-usage://dashboard"))
         }
             .contentMarginsDisabled()
             .configurationDisplayName("All AI usage")
@@ -110,7 +110,7 @@ struct GoogleUsageWidget: Widget {
         StaticConfiguration(kind: "CodenotchGoogleUsage", provider: OverviewTimeline()) { entry in
             UsageOverview(snapshot: entry.snapshot, date: entry.date, googleOnly: true)
                 .containerBackground(for: .widget) { WidgetBackdrop() }
-                .widgetURL(URL(string: "codenotch-usage://settings"))
+                .widgetURL(URL(string: "codenotch-usage://dashboard"))
         }
             .contentMarginsDisabled()
             .configurationDisplayName("Google AI Pro")
