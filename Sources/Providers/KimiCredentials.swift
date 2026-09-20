@@ -4,9 +4,8 @@ import Foundation
 ///
 /// Kimi Code CLI signs in through auth.kimi.com and writes the OAuth session
 /// here — one file per managed provider, and `kimi-code` is the Kimi Code
-/// account itself. Codenotch only reads it: the access token lives fifteen
-/// minutes (`expires_in: 900`) and refreshing is the CLI's job, the same
-/// bargain as Grok's — writing a new one would race the CLI for the file.
+/// account itself. Renewal uses the CLI's per-credential lock and atomic
+/// storage format so its rotating refresh token is shared safely.
 /// `KIMI_CODE_HOME` moves the whole data root, so the path honours it.
 struct KimiCredentials {
     static var authURL: URL {
@@ -67,9 +66,31 @@ struct KimiCredentials {
         return KimiUsage.endpoint
     }
 
+    /// Only official OAuth hosts may receive a saved refresh token. The
+    /// explicit region in the CLI's login takes precedence over the API URL.
+    static func oauthEndpoint(in config: String) -> URL? {
+        var inSection = false
+        for raw in config.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("[") {
+                inSection = line == "[providers.\"managed:kimi-code\".oauth]"
+                continue
+            }
+            guard inSection else { continue }
+            let pair = line.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            guard pair.count == 2, pair[0] == "oauth_host" else { continue }
+            guard ["\"https://auth.kimi.com\"", "\"https://auth.kimi.ai\""].contains(pair[1]) else { return nil }
+            return URL(string: String(pair[1].dropFirst().dropLast()) + "/api/oauth/token")
+        }
+        return URL(string: usageEndpoint(in: config).host == "api.kimi.ai"
+                   ? "https://auth.kimi.ai/api/oauth/token" : "https://auth.kimi.com/api/oauth/token")
+    }
+
     let accessToken: String
     let expiresAt: Date
     var endpoint: URL = KimiUsage.endpoint
+    var refreshToken: String?
+    var oauthEndpoint: URL?
 
     var isExpired: Bool { expiresAt <= Date() }
 
@@ -99,6 +120,8 @@ struct KimiCredentials {
         let config = (try? String(contentsOf: configURL, encoding: .utf8)) ?? ""
         return KimiCredentials(accessToken: token,
                                expiresAt: Date(timeIntervalSince1970: expires),
-                               endpoint: usageEndpoint(in: config))
+                               endpoint: usageEndpoint(in: config),
+                               refreshToken: root["refresh_token"] as? String,
+                               oauthEndpoint: oauthEndpoint(in: config))
     }
 }

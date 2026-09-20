@@ -56,9 +56,15 @@ provider widget can show three. The OpenAI meter
 measures **Codex usage on your ChatGPT plan**, not ChatGPT web chat activity.
 Kimi reads the managed Kimi Code login, including the current global `.ai`
 region and environment-specific credential file. Its current 5h and monthly
-ratios take priority over legacy counters. Kimi itself owns token renewal;
-opening Kimi Code and running `/usage` refreshes an expired session without
-making a model request. GLM also supports the selected Coding Plan credential
+ratios take priority over legacy counters. Codenotch automatically renews the
+saved session before usage requests when it is expired or within two minutes
+of expiry, and retries once if the usage endpoint rejects an access token.
+Renewal uses the official regional OAuth host, Kimi Code's per-credential
+directory lock and heartbeat, and a private atomic credential write. It makes
+no model request and preserves a concurrent owner login/logout. Transient
+failures back off; a revoked session requires signing in again.
+The protocol follows [Kimi Code 2.0.2's OAuth implementation](https://github.com/MoonshotAI/kimi-code/tree/9d07f634be94ebeb1deba2f55d247807cf729315/packages/oauth/src).
+GLM also supports the selected Coding Plan credential
 in current OpenCode's SQLite database, alongside upstream's older sources.
 Sign into the appropriate official tool first. DeepSeek uses its explicit
 in-app Platform login, which supports balance and API-key/model breakdowns.
@@ -131,3 +137,12 @@ not counted as a successful full run. The native overview and Google layouts
 were rendered and checked again, including the sub-1% Cursor reading.
 Release build 21 was installed and its registered extension's cache confirmed
 all nine providers, including a ready Cursor reading from the signed-in editor.
+
+Release build 22 renewed the previously expired Kimi session automatically on
+launch and fetched a fresh quota. Both the app snapshot and the registered
+widget's cache reported all nine providers ready. The full suite passed 1,729
+tests (three skipped, zero failures), followed by all 15 final renewal tests,
+including a second expiry using the rotated refresh token. The earlier local
+Xcode loader/symbolicator stall was avoided with products under `/tmp` and
+`ENABLE_DEBUG_DYLIB=NO DEBUG_INFORMATION_FORMAT=dwarf-with-dsym`; no system
+security settings were changed.
