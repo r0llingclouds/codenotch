@@ -45,6 +45,28 @@ struct WidgetUsageMeter: Codable, Equatable, Identifiable {
     let resetDescription: String?
 }
 
+/// One presentation order for the app and every widget size, so an important
+/// model quota cannot be promoted in one surface and truncated in another.
+enum UsageMeterSelection {
+    static func isFable(_ meter: WidgetUsageMeter) -> Bool {
+        // weekly_scoped can describe other models, so its label matters.
+        meter.id == "weekly_fable" || meter.label.localizedCaseInsensitiveContains("fable")
+    }
+
+    static func prioritizedMeters(for reading: WidgetProviderReading) -> [WidgetUsageMeter] {
+        var meters = reading.meters
+        if reading.id == "claude", let index = meters.firstIndex(where: isFable) {
+            let fable = meters.remove(at: index)
+            meters.insert(fable, at: 0)
+        }
+        return meters
+    }
+
+    static func overviewMeters(for reading: WidgetProviderReading) -> [WidgetUsageMeter] {
+        Array(prioritizedMeters(for: reading).prefix(reading.id == "claude" ? 3 : 2))
+    }
+}
+
 enum UsageWidgetStorage {
     static let group = "group.com.r0llingclouds.codenotch"
     static let fileName = "usage-widget.json"

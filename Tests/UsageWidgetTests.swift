@@ -68,6 +68,25 @@ final class GoogleUsagePagesTests: XCTestCase {
 
 @MainActor
 final class UsageWidgetTests: XCTestCase {
+    func testFableLeadsEveryWidgetSizeWithoutDroppingOtherQuotas() throws {
+        let windows = [LimitWindow(id: "session", label: "Current session", usedFraction: 0.08),
+                       LimitWindow(id: "weekly_all", label: "All models", usedFraction: 0.18),
+                       LimitWindow(id: "weekly_scoped", label: "Fable", usedFraction: 0.26)]
+        let source = ProviderSnapshot(id: "claude", displayName: "Claude", glyph: .claude,
+                                      fidelity: .official, status: .ok, windows: windows)
+        let snapshot = WidgetSnapshotPublisher.makeSnapshot([source], disconnected: [], dates: ["claude": Date()])
+        let roundTrip = try XCTUnwrap(UsageWidgetStorage.decode(JSONEncoder().encode(snapshot)))
+        let claude = try XCTUnwrap(roundTrip.providers.first { $0.id == "claude" })
+        let overview = UsageMeterSelection.overviewMeters(for: claude)
+        let individual = UsageMeterSelection.prioritizedMeters(for: claude)
+        XCTAssertEqual(overview.map(\.id), ["weekly_scoped", "session", "weekly_all"])
+        XCTAssertEqual(individual, overview)
+        XCTAssertEqual(individual.first?.label, "Fable")
+        XCTAssertEqual(individual.first?.usedFraction, 0.26)
+        XCTAssertEqual(individual.dropFirst().map(\.usedFraction), [0.08, 0.18])
+        XCTAssertEqual(claude.meters.map(\.id), windows.map(\.id), "Presentation does not rewrite the shared data")
+    }
+
     func testSnapshotContainsAllMetersAndDoesNotInventMissingValues() {
         let snapshot = WidgetSnapshotPublisher.makeSnapshot([], disconnected: [], dates: [:])
         XCTAssertEqual(snapshot.providers.map(\.id), ["codex", "claude", "cursor", "kimi", "glm", "deepseek", "gemini-chat", "notebooklm", "google-flow"])

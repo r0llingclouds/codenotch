@@ -41,6 +41,10 @@ cards and larger usage figures. Individual provider widgets use a circular main
 meter; the small size also retains the second quota, and the medium size shows
 up to three. Credit balances remain amounts rather than percentage gauges.
 Missing and stale readings keep their explicit status.
+Claude's card gives Fable a highlighted row above the session and weekly
+allowance. The individual Claude widgets use Fable for the main ring and keep
+both other quotas visible, including in the small size. The app and widgets
+share the same quota-priority selection.
 
 The floating notch is hidden by default in this fork. Codenotch remains in the
 menu bar for the dashboard, sign-in, refresh and settings. Close the windows to leave collection

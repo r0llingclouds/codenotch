@@ -69,17 +69,10 @@ struct UsageDashboardView: View {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14),
                                         count: width >= 740 ? 3 : 2), spacing: 14) {
                     ForEach(model.snapshot.providers) { reading in
-                        Button { model.select(reading.id) } label: {
-                            DashboardCard(reading: reading, plan: model.plans[reading.id], date: date,
-                                          selected: model.selectedID == reading.id,
-                                          refreshing: model.refreshing.contains(reading.id))
-                        }
-                        .buttonStyle(DashboardCardButtonStyle())
-                        .accessibilityLabel(reading.name + ", " + DashboardCopy.state(reading, at: date))
-                        .accessibilityValue(reading.meters.map {
-                            $0.label + ": " + ($0.usedFraction.map(DashboardCopy.percentage) ?? $0.value)
-                        }.joined(separator: ", "))
-                        .accessibilityHint(L10n.t("Show usage details"))
+                        DashboardProviderButton(reading: reading, plan: model.plans[reading.id], date: date,
+                                                selected: model.selectedID == reading.id,
+                                                refreshing: model.refreshing.contains(reading.id),
+                                                select: { model.select(reading.id) })
                     }
                 }
                 .padding(.horizontal, 28)
@@ -97,6 +90,39 @@ struct UsageDashboardView: View {
             .padding(.vertical, 17)
             .background(.white.opacity(0.025))
         }
+    }
+}
+
+private struct DashboardProviderButton: View {
+    let reading: WidgetProviderReading
+    let plan: String?
+    let date: Date
+    let selected: Bool
+    let refreshing: Bool
+    let select: () -> Void
+
+    // Keep string construction outside the view-builder expression. Xcode 26
+    // on the CI runner times out resolving the nested map/Optional.map overloads
+    // inside the grid's Button, even though Xcode 27 builds it locally.
+    private var accessibilityValue: String {
+        let descriptions: [String] = UsageMeterSelection.prioritizedMeters(for: reading).map { meter in
+            let value: String
+            if let fraction = meter.usedFraction { value = DashboardCopy.percentage(fraction) }
+            else { value = meter.value }
+            return "\(meter.label): \(value)"
+        }
+        return descriptions.joined(separator: ", ")
+    }
+
+    var body: some View {
+        Button(action: select) {
+            DashboardCard(reading: reading, plan: plan, date: date,
+                          selected: selected, refreshing: refreshing)
+        }
+        .buttonStyle(DashboardCardButtonStyle())
+        .accessibilityLabel(reading.name + ", " + DashboardCopy.state(reading, at: date))
+        .accessibilityValue(accessibilityValue)
+        .accessibilityHint(L10n.t("Show usage details"))
     }
 }
 
@@ -119,7 +145,7 @@ private struct DashboardCard: View {
 
     var body: some View {
         let tint = DashboardBrand.color(reading.id)
-        let meters = DashboardOverview.meters(for: reading)
+        let meters = UsageMeterSelection.overviewMeters(for: reading)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 DashboardBrand(id: reading.id, size: 23)
@@ -140,7 +166,7 @@ private struct DashboardCard: View {
                 HStack(alignment: .top, spacing: meters.count > 2 ? 10 : 18) {
                     ForEach(meters) { meter in
                         DashboardMeter(meter: meter, tint: tint, compact: true,
-                                       prominent: reading.id == "claude" && DashboardOverview.isFable(meter))
+                                       prominent: reading.id == "claude" && UsageMeterSelection.isFable(meter))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }

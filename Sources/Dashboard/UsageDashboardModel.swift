@@ -39,24 +39,6 @@ final class UsageDashboardModel: ObservableObject {
     }
 }
 
-enum DashboardOverview {
-    static func isFable(_ meter: WidgetUsageMeter) -> Bool {
-        // The current API calls it weekly_scoped; the model's name comes
-        // from the label. A scoped quota for a different model is not Fable.
-        meter.id == "weekly_fable" || meter.label.localizedCaseInsensitiveContains("fable")
-    }
-
-    static func meters(for reading: WidgetProviderReading) -> [WidgetUsageMeter] {
-        guard reading.id == "claude" else { return Array(reading.meters.prefix(2)) }
-        var meters = reading.meters
-        if let index = meters.firstIndex(where: isFable) {
-            let fable = meters.remove(at: index)
-            meters.insert(fable, at: 0)
-        }
-        return Array(meters.prefix(3))
-    }
-}
-
 enum DashboardCopy {
     static func state(_ reading: WidgetProviderReading, at now: Date) -> String {
         switch reading.effectiveState(at: now) {

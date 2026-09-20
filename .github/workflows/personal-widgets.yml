@@ -2,9 +2,13 @@ name: Personal widgets
 
 on:
   push:
-    branches: [feature/native-usage-widgets]
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: personal-widgets-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

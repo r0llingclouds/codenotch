@@ -129,12 +129,15 @@ private struct CompactMeter: View {
     let meter: WidgetUsageMeter
     let color: Color
     var narrow = false
+    var condensed = false
+    var emphasized = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: condensed ? 2 : 3) {
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text(percentageNumber(meter.usedFraction ?? 0))
-                    .font(.system(size: narrow ? 15 : 16, weight: .semibold, design: .rounded))
-                Text("%").font(.system(size: 9, weight: .medium)).foregroundStyle(widgetMuted)
+                    .font(.system(size: condensed ? 11 : narrow ? 15 : 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(emphasized ? color : widgetInk)
+                Text("%").font(.system(size: condensed ? 7 : 9, weight: .medium)).foregroundStyle(widgetMuted)
                 if !narrow {
                     Spacer(minLength: 2)
                     Text(compactLabel(meter)).font(.system(size: 8, weight: .medium))
@@ -148,6 +151,26 @@ private struct CompactMeter: View {
             MeterTrack(fraction: meter.usedFraction ?? 0, color: (meter.usedFraction ?? 0) >= 0.9 ? .red : color)
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(meter.label), \(meter.value)")
+    }
+}
+
+private struct FeaturedQuota: View {
+    let meter: WidgetUsageMeter
+    let color: Color
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(compactLabel(meter)).font(.system(size: 8, weight: .semibold))
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                Spacer(minLength: 0)
+                Text(meter.usedFraction.map { "\(percentageNumber($0))%" } ?? meter.value)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(color).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+            }
+            if let fraction = meter.usedFraction { MeterTrack(fraction: fraction, color: color) }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(meter.label), \(meter.value)")
     }
@@ -195,13 +218,25 @@ private struct CompactProviderCard: View {
                 }
             }
             if (state == .ready || state == .stale), !reading.meters.isEmpty {
-                let meters = Array(reading.meters.prefix(2))
+                let meters = UsageMeterSelection.overviewMeters(for: reading)
                 if let balance = meters.first, balance.usedFraction == nil {
                     CreditAmount(meter: balance, color: color, stacked: narrow)
                         .frame(maxHeight: .infinity, alignment: .center)
+                } else if narrow, meters.count == 3, let featured = meters.first {
+                    VStack(spacing: 2) {
+                        FeaturedQuota(meter: featured, color: color)
+                        HStack(alignment: .top, spacing: 5) {
+                            ForEach(Array(meters.dropFirst())) { meter in
+                                CompactMeter(meter: meter, color: color, narrow: true, condensed: true)
+                            }
+                        }
+                    }
                 } else {
                     HStack(alignment: .top, spacing: narrow ? 5 : 10) {
-                        ForEach(meters) { meter in CompactMeter(meter: meter, color: color, narrow: narrow) }
+                        ForEach(meters) { meter in
+                            CompactMeter(meter: meter, color: color, narrow: narrow,
+                                         emphasized: reading.id == "claude" && UsageMeterSelection.isFable(meter))
+                        }
                     }
                 }
             } else {
@@ -329,6 +364,8 @@ struct SingleProviderView: View {
         let color = ProviderStyle(id: reading.id).color
         let state = reading.effectiveState(at: date)
         let usable = state == .ready || state == .stale
+        let meters = UsageMeterSelection.prioritizedMeters(for: reading)
+        let smallWithThree = family == .systemSmall && meters.count > 2
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) {
                 ProviderMark(id: reading.id, size: 19)
@@ -337,32 +374,37 @@ struct SingleProviderView: View {
                 if state == .stale { Image(systemName: "clock").foregroundStyle(.orange) }
                 else { Image(systemName: "arrow.up.right").foregroundStyle(widgetMuted) }
             }.font(.system(size: 9, weight: .medium))
-            if usable, let meter = reading.meters.first {
+            if usable, let meter = meters.first {
                 if let fraction = meter.usedFraction {
                     HStack(spacing: 19) {
-                        VStack(spacing: 6) {
+                        VStack(spacing: smallWithThree ? 4 : 6) {
                             UsageRing(fraction: fraction, color: fraction >= 0.9 ? .red : color,
-                                      caption: family == .systemSmall && reading.meters.count > 1 ? compactLabel(meter) : L10n.t("used"))
-                                .frame(width: family == .systemSmall ? 66 : 68, height: family == .systemSmall ? 66 : 68)
-                            if family == .systemSmall, let secondary = reading.meters.dropFirst().first {
-                                HStack(spacing: 4) {
-                                    Text(compactLabel(secondary)).foregroundStyle(widgetMuted)
-                                    Text(secondary.usedFraction.map { "\(percentageNumber($0))%" } ?? secondary.value)
-                                        .foregroundStyle(color).monospacedDigit()
-                                }.font(.system(size: 9, weight: .medium))
+                                      caption: family == .systemSmall && meters.count > 1 ? compactLabel(meter) : L10n.t("used"))
+                                .frame(width: smallWithThree ? 60 : family == .systemSmall ? 66 : 68,
+                                       height: smallWithThree ? 60 : family == .systemSmall ? 66 : 68)
+                            if family == .systemSmall, meters.count > 1 {
+                                VStack(spacing: 2) {
+                                    ForEach(Array(meters.dropFirst().prefix(2))) { secondary in
+                                        HStack(spacing: 4) {
+                                            Text(compactLabel(secondary)).foregroundStyle(widgetMuted)
+                                            Text(secondary.usedFraction.map { "\(percentageNumber($0))%" } ?? secondary.value)
+                                                .foregroundStyle(color).monospacedDigit()
+                                        }.font(.system(size: 9, weight: .medium))
+                                    }
+                                }
                             } else {
                                 Text(compactLabel(meter)).font(.system(size: 9, weight: .medium)).foregroundStyle(widgetMuted)
                             }
                         }.frame(maxWidth: family == .systemSmall ? .infinity : nil)
                         if family == .systemMedium {
                             VStack(alignment: .leading, spacing: 8) {
-                                ForEach(Array(reading.meters.dropFirst().prefix(2))) { secondary in
+                                ForEach(Array(meters.dropFirst().prefix(2))) { secondary in
                                     VStack(alignment: .leading, spacing: 4) {
                                         CompactMeter(meter: secondary, color: color)
                                         ResetCaption(meter: secondary, date: date)
                                     }
                                 }
-                                if reading.meters.count == 1 {
+                                if meters.count == 1 {
                                     Text(L10n.t("Your allowance, at a glance.")).font(.system(size: 12)).foregroundStyle(widgetMuted)
                                 }
                             }.frame(maxWidth: .infinity)
