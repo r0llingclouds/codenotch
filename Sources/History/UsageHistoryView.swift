@@ -5,11 +5,13 @@ struct HistoryRecordingBadge: View {
     @ObservedObject var model: UsageHistoryModel
     var body: some View {
         HStack(spacing: 6) {
-            Circle().fill(model.error == nil ? Color.mint : .orange).frame(width: 5, height: 5)
-            Text(model.error == nil ? L10n.t("History saved on this Mac") : L10n.t("History needs attention"))
+            Circle().fill(model.error == nil && !model.recordingError ? Color.mint : .orange).frame(width: 5, height: 5)
+            Text(model.error == nil && !model.recordingError ? L10n.t("History saved on this Mac") : L10n.t("History needs attention"))
         }
         .font(.system(size: 11)).foregroundStyle(dashboardMuted)
-        .help(model.error ?? L10n.t("Readings are saved automatically while Codenotch is running."))
+        .help(model.error ?? (model.recordingError
+            ? L10n.t("History could not be saved. Check available disk space and folder access.")
+            : L10n.t("Readings are saved on this Mac by the background service, even after you quit the app.")))
     }
 }
 
@@ -49,7 +51,7 @@ struct UsageHistoryView: View {
                     Image(systemName: "internaldrive")
                     VStack(alignment: .leading, spacing: 4) {
                         Text(L10n.t("Your history stays on this Mac. Export any series as CSV."))
-                        Text(L10n.t("Recording continues with the window closed, while Codenotch is running. Days without readings stay empty."))
+                        Text(L10n.t("The background service records readings even after you quit the app. Days without readings stay empty."))
                     }
                 }.font(.system(size: 11)).foregroundStyle(dashboardMuted)
             }

@@ -3,6 +3,8 @@ import Combine
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var collector: UsageCollectorRuntime?
+    private var collectorClient: CollectorDashboardClient?
     private var notchFleet: NotchFleet?
     private var store: UsageStore?
     private var widgetPublisher: WidgetSnapshotPublisher?
@@ -86,21 +88,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the app registered as a UIElement with no Dock tile, which looked
         // exactly like the icon having failed to install. The user's choice
         // replaces this a moment later, once preferences exist.
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(Runtime.isCollector ? .accessory : .regular)
         guard !isRunningTests else { return }
         Self.retireOlderInstances()
+        if Runtime.isPersonal && !Runtime.isCollector && CommandLine.arguments.contains("--prepare-update") {
+            NSApp.setActivationPolicy(.accessory)
+            Task {
+                do { try await CollectorService.prepareForUpdate(); NSApp.terminate(nil) }
+                catch {
+                    FileHandle.standardError.write(Data("Cannot stop background collector: \(error.localizedDescription)\n".utf8))
+                    exit(EXIT_FAILURE)
+                }
+            }
+            return
+        }
 
         // Before Preferences reads anything, or the first launch flag and
         // every choice would be read from an empty domain.
         if (Bundle.main.object(forInfoDictionaryKey: "CodenotchPersonalFork") as? Bool == true) {
-            UserDefaults.standard.register(defaults: [
-                "notchVisibility": "hidden", "appPresence": "menuBar",
+            UserDefaults.codenotch.register(defaults: [
+                "notchVisibility": "hidden", "appPresence": "dock",
                 "connectedProviders": UsageWidgetSnapshot.catalogue.map(\.id),
                 "providerOrder": UsageWidgetSnapshot.catalogue.map(\.id)
             ])
         } else { Preferences.migrateFromPreviousName() }
         let preferences = Preferences()
         self.preferences = preferences
+
+        if Runtime.isCollector {
+            collector = UsageCollectorRuntime(preferences: preferences)
+            return
+        }
+        if Runtime.isPersonal {
+            let client = CollectorDashboardClient()
+            collectorClient = client
+            dashboard = UsageDashboardWindowController(model: client.model, preferences: preferences,
+                refreshAll: { [weak client] in client?.send("refreshAll") },
+                refreshProvider: { [weak client] in client?.send("refresh:" + $0) },
+                openSettings: { [weak client] in client?.send("settings") })
+            openDashboardRoute(pendingDashboardRoute ?? .overview)
+            pendingDashboardRoute = nil
+            return
+        }
 
         // One notch per display: the fleet owns a controller for each screen
         // the scope asks for and fans every reading out to all of them. The
@@ -1011,12 +1040,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor func openDashboard() {
+        if Runtime.isCollector {
+            NSWorkspace.shared.open(URL(string: "codenotch-usage://dashboard")!)
+            return
+        }
         guard let dashboard else { pendingDashboardRoute = .overview; return }
         didPresentDashboardRoute = true
         dashboard.show()
     }
 
-    @MainActor func openSettings() { settings?.show() }
+    @MainActor func openSettings() {
+        if let collector { collector.openSettings() }
+        else if let collectorClient { collectorClient.send("settings") }
+        else { settings?.show() }
+    }
+    @MainActor func closeCollectorSettings() { collector?.closeSettings() }
+
     @MainActor func openConnectPhone() {
         guard PhoneLink.isAvailable, let pairing = phoneLinkPairing, let registry = phoneLinkRegistry, let status = phoneLinkServerStatus else { return }
         if preferences?.phoneLinkEnabled == false { preferences?.phoneLinkEnabled = true }
@@ -1024,6 +1063,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        collector?.stop()
         ollamaRelay?.configure(enabled: false, endpoint: OllamaEndpoint.defaultAddress)
         lmstudioMetrics?.stop()
         tokenRefresher?.stop()

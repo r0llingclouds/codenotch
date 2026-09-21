@@ -1,6 +1,6 @@
 # Personal usage dashboard and widgets
 
-This fork adds a native SwiftUI dashboard and WidgetKit widgets to Codenotch. The background app reads
+This fork adds a native SwiftUI dashboard and WidgetKit widgets to Codenotch. An embedded background collector reads
 provider usage; the widget extension only receives normalized quota windows,
 balances, status and measurement dates. Upstream Codenotch remains MIT licensed.
 
@@ -16,14 +16,14 @@ session and all-model weekly allowance. Fable's percentage is highlighted in
 Claude's accent color; it is visible without opening the details sidebar.
 
 Use **Refresh** (⌘R) for all providers, **Refresh reading** for the selected one,
-or **Manage accounts** to open the existing account settings. The menu bar's
-**Open AI Usage** (⌘1) also brings the dashboard forward. A widget card opens
+or **Manage accounts** to open account settings. **Open AI Usage** (⌘1) in the
+application menu also brings the dashboard forward. A widget card opens
 that service's details; the widget background opens the overview.
 
-Closing the window (⌘W) leaves usage collection and widgets running. The Dock
-icon remains while the dashboard or Settings is open, then returns to the
-chosen app-presence setting. Opening the dashboard never adds another polling
-loop: the app and widgets share the same store and readings.
+Closing the window (⌘W) or quitting the app (⌘Q) leaves collection running in
+an independent launch agent. The dashboard has no polling store and no menu
+bar item. Account settings open on demand in the collector, which owns the
+existing sessions; closing those settings hides its temporary Dock icon.
 
 ## Local usage history
 
@@ -48,7 +48,7 @@ Data is kept across app restarts in
 SQLite database. There is no automatic history deletion or cloud upload. The
 database contains provider/meter labels, numerical readings, units, timestamps
 and reset dates, without credentials, account identifiers or conversation text.
-Recording continues with the dashboard closed while the background app runs,
+Recording continues after quitting the dashboard, while the collector runs,
 using the existing five-minute idle / one-minute active refresh schedule.
 
 History starts with the first fresh reading after this version is installed;
@@ -84,9 +84,31 @@ allowance. The individual Claude widgets use Fable for the main ring and keep
 both other quotas visible, including in the small size. The app and widgets
 share the same quota-priority selection.
 
-The floating notch is hidden by default in this fork. Codenotch remains in the
-menu bar for the dashboard, sign-in, refresh and settings. Close the windows to leave collection
-running. Quit the app to stop it. No login item is installed automatically.
+## Background updates
+
+Opening the app registers its embedded collector with `SMAppService.agent`.
+It starts at login and macOS restarts it if it exits unexpectedly. It has no
+menu bar icon and no windows until **Manage accounts** is selected. The
+collector retains the existing five-minute idle / one-minute active schedule;
+opening or closing the dashboard does not create another polling loop.
+
+The dashboard footer offers **Pause background updates** and **Resume background
+updates**. Pausing unregisters the launch agent and persists across launches.
+If macOS requires approval, the footer opens System Settings → General → Login
+Items & Extensions. Disabling the item there stops automatic collection too.
+Collection needs a logged-in, awake Mac and an internet connection; WidgetKit
+still controls when the desktop actually redraws. Cached readings become stale
+rather than inventing new measurements while offline or paused.
+
+The helper lives inside `Codenotch.app/Contents/Library/LoginItems`, with its
+launch-agent plist in `Contents/Library/LaunchAgents`. A one-time copy migrates
+Codenotch's own WebKit and HTTP session storage before the first helper launch.
+Original sessions remain intact and existing helper sessions are never replaced.
+The helper shares the existing preferences domain and local history database.
+The dashboard reads private normalized state from
+`~/Library/Application Support/Codenotch/collector-state.json`; bounded commands
+travel through same-session distributed notifications. No command endpoint is
+added to the widget HTTP bridge. Pause background updates before uninstalling.
 
 ## Build and install
 
@@ -152,7 +174,7 @@ dates from a localized clock string.
 
 ## Freshness and privacy
 
-The app refreshes at upstream's normal cadence (five minutes while idle).
+The collector refreshes at upstream's normal cadence (five minutes while idle).
 WidgetKit controls display refresh scheduling, so the widget is not a second
 by second monitor. It includes measurement age, marks readings stale after
 15 minutes, and never assumes that a quota reset has occurred merely because
@@ -161,7 +183,7 @@ its countdown elapsed. Disabling a provider clears its exported reading.
 The default local build provides **read-only** normalized widget snapshots on
 `127.0.0.1:48531/widget-snapshot`. It binds only to loopback, provides no refresh
 or credential endpoints, and sends no account names, keys or chat content.
-Other local processes can read those normalized usage values while the app runs.
+Other local processes can read those normalized usage values while the collector runs.
 The widget keeps a local last-known snapshot and labels old readings as stale.
 
 An Apple Development certificate with the App Group capability can optionally
@@ -216,3 +238,11 @@ Build 23 removes the overview branding and readiness badge, compacts the title
 and gives the cards more height. Native renders of the large overview and
 Google widget were inspected; the complete suite passed 1,730 tests with three
 skipped and zero failures.
+
+Build 31 moves polling and history writes to an independent SMAppService launch
+agent. Migration, IPC validation, private state persistence, dashboard, history,
+preferences and widget checks pass in 84 focused local tests. Live checks
+confirmed all nine services after migrating the existing sessions, manual
+refresh and account settings through IPC, and pause persistence across app
+quit/reopen. With the dashboard process absent, a subsequent automatic poll
+updated all nine provider measurement dates and appended 17 history samples.

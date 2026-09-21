@@ -12,6 +12,7 @@ final class UsageHistoryModel: ObservableObject {
     @Published private(set) var globalDays: [UsageHistoryDay] = []
     @Published private(set) var providerTrends: [UsageHistoryTrend] = []
     @Published private(set) var isLoading = false
+    @Published var recordingError = false
     @Published private(set) var error: String?
     @Published var providerID = "all" { didSet { if oldValue != providerID { selectionChanged() } } }
     @Published var seriesID = "" { didSet { if oldValue != seriesID { selectionChanged() } } }

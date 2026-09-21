@@ -54,7 +54,7 @@ final class UsageDashboardWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         // Keep the app in the Dock while Settings is still open. Closing the
-        // dashboard only hides a window; UsageStore and the widgets keep going.
+        // dashboard only hides a window; the separate collector keeps going.
         NSApp.setActivationPolicy(keepRegularPresence() ? .regular : preferences.appPresence.activationPolicy)
     }
 }

@@ -29,6 +29,10 @@ jobs:
             -configuration Release -destination 'platform=macOS,arch=arm64' \
             -derivedDataPath build/Personal CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= \
             CODE_SIGN_STYLE=Automatic build
+          APP=build/Personal/Build/Products/Release/Codenotch.app
+          test -x "$APP/Contents/Library/LoginItems/CodenotchCollector.app/Contents/MacOS/CodenotchCollector"
+          plutil -lint "$APP/Contents/Library/LaunchAgents/com.r0llingclouds.codenotch.collector.plist"
+          codesign --verify --deep --strict "$APP"
           ditto -c -k --sequesterRsrc --keepParent \
             build/Personal/Build/Products/Release/Codenotch.app build/Codenotch-Widgets.zip
       - uses: actions/upload-artifact@v7

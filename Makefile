@@ -107,8 +107,12 @@ install: gen
 	@APP=$$(xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
 		-configuration Release -showBuildSettings 2>/dev/null \
 		| awk -F' = ' '/ BUILT_PRODUCTS_DIR/ {print $$2; exit}')/Codenotch.app; \
+	if [ -f /Applications/Codenotch.app/Contents/Library/LaunchAgents/com.r0llingclouds.codenotch.collector.plist ]; then \
+		/Applications/Codenotch.app/Contents/MacOS/Codenotch --prepare-update || exit 1; \
+	fi; \
 	pkill -x Codenotch || true; \
-	cp -R "$$APP" /Applications/; \
+	ditto "$$APP" /Applications/Codenotch.app; \
+	codesign --verify --deep --strict /Applications/Codenotch.app || exit 1; \
 	open /Applications/Codenotch.app
 
 clean:

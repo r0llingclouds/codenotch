@@ -25,6 +25,8 @@ enum UsageDashboardRoute: Equatable {
 /// selecting or closing it never creates a second polling loop.
 @MainActor
 final class UsageDashboardModel: ObservableObject {
+    var collectorService: CollectorService?
+    var canRefresh: Bool { collectorService?.enabled ?? true }
     let history: UsageHistoryModel
     @Published var showsHistory = false
 

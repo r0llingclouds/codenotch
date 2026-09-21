@@ -21,7 +21,7 @@ struct UsageDashboardView: View {
                 if let reading = model.selectedReading, !model.showsHistory {
                     Rectangle().fill(.white.opacity(0.08)).frame(width: 1)
                     DashboardDetail(reading: reading, plan: model.plans[reading.id],
-                                    date: context.date, refreshing: model.refreshing.contains(reading.id),
+                                    date: context.date, refreshing: model.refreshing.contains(reading.id), canRefresh: model.canRefresh,
                                     refresh: { refreshProvider(reading.id) },
                                     openSettings: openSettings, close: { model.select(nil) },
                                     showHistory: {
@@ -57,9 +57,10 @@ struct UsageDashboardView: View {
                     Label(L10n.t("Refresh"), systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: .command)
-                .disabled(!model.refreshing.isEmpty)
+                .disabled(!model.canRefresh || !model.refreshing.isEmpty)
                 .help(L10n.t("Refresh all services"))
                 Button(action: openSettings) { Image(systemName: "slider.horizontal.3") }
+                    .disabled(!model.canRefresh)
                     .accessibilityLabel(L10n.t("Manage accounts"))
                     .help(L10n.t("Manage accounts"))
             }
@@ -97,9 +98,14 @@ struct UsageDashboardView: View {
             }
             HStack(spacing: 7) {
                 Image(systemName: model.refreshing.isEmpty ? "clock" : "arrow.clockwise")
-                Text(model.refreshing.isEmpty ? L10n.t("Auto refresh · 5 min idle / 1 min active") : L10n.t("Updating readings…"))
+                Text(!model.canRefresh ? L10n.t("Automatic updates paused") :
+                    (model.refreshing.isEmpty ? L10n.t("Auto refresh · 5 min idle / 1 min active") : L10n.t("Updating readings…")))
                 Spacer(minLength: 0)
-                Text(L10n.t("Widgets stay in sync"))
+                if let service = model.collectorService {
+                    BackgroundCollectionControl(service: service)
+                } else {
+                    Text(L10n.t("Widgets stay in sync"))
+                }
             }
             .font(.system(size: 11))
             .foregroundStyle(dashboardMuted)
@@ -107,6 +113,28 @@ struct UsageDashboardView: View {
             .padding(.vertical, 17)
             .background(.white.opacity(0.025))
         }
+    }
+}
+
+private struct BackgroundCollectionControl: View {
+    @ObservedObject var service: CollectorService
+    var body: some View {
+        Menu {
+            if service.needsApproval {
+                Button(L10n.t("Open System Settings")) { service.openApproval() }
+            } else if service.enabled {
+                Button(L10n.t("Pause background updates")) { service.pause() }
+            } else {
+                Button(L10n.t("Resume background updates")) { service.enable() }
+            }
+            if let error = service.error { Text(error) }
+            Text(L10n.t("Updates and history continue after you quit the app."))
+        } label: {
+            Label(service.label, systemImage: service.enabled ? "checkmark.circle" : "pause.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(service.error ?? L10n.t("Manage background updates"))
     }
 }
 
@@ -256,6 +284,7 @@ private struct DashboardDetail: View {
     let plan: String?
     let date: Date
     let refreshing: Bool
+    let canRefresh: Bool
     let refresh: () -> Void
     let openSettings: () -> Void
     let close: () -> Void
@@ -317,8 +346,9 @@ private struct DashboardDetail: View {
                     Label(refreshing ? L10n.t("Updating…") : L10n.t("Refresh reading"), systemImage: "arrow.clockwise")
                         .frame(maxWidth: .infinity)
                 }
-                .disabled(refreshing || reading.state == .disabled || reading.state == .notConnected)
+                .disabled(!canRefresh || refreshing || reading.state == .disabled || reading.state == .notConnected)
                 Button(action: openSettings) { Text(L10n.t("Manage accounts")).frame(maxWidth: .infinity) }
+                    .disabled(!canRefresh)
             }.buttonStyle(.bordered).controlSize(.large).padding(24)
         }
     }

@@ -9,6 +9,16 @@ struct CodenotchMain: App {
         // their contents and application commands.
         Settings { EmptyView() }
             .commands {
+                CommandGroup(replacing: .appTermination) {
+                    if Runtime.isCollector {
+                        Button(L10n.t("Close account settings")) { appDelegate.closeCollectorSettings() }
+                            .keyboardShortcut("q", modifiers: .command)
+                    } else {
+                        Button(L10n.t("Quit Codenotch")) { NSApp.terminate(nil) }
+                            .keyboardShortcut("q", modifiers: .command)
+                    }
+                }
+
                 CommandGroup(replacing: .newItem) {
                     Button(L10n.t("Close Window")) { NSApp.keyWindow?.performClose(nil) }
                         .keyboardShortcut("w", modifiers: .command)

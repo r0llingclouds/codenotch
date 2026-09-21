@@ -18,7 +18,7 @@ settings:
     # silently pins every build to one version, so no customer ever sees an
     # update. Bump CURRENT_PROJECT_VERSION on every release.
     MARKETING_VERSION: "1.16.0"
-    CURRENT_PROJECT_VERSION: "30"
+    CURRENT_PROJECT_VERSION: "31"
     # Personal builds are ad-hoc signed. A stable development identity can
     # be supplied locally to retain Keychain approval across rebuilds.
     CODE_SIGN_IDENTITY: "-"
@@ -60,10 +60,20 @@ targets:
     dependencies:
       - target: CodenotchWidget
         embed: true
+      - target: CodenotchCollector
+        embed: false
       - package: SwiftNIO
         product: NIOHTTP1
       - package: SwiftNIO
         product: NIOPosix
+    postBuildScripts:
+      - name: Embed background collector
+        script: |
+          set -eu
+          mkdir -p "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LoginItems" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LaunchAgents"
+          ditto "$BUILT_PRODUCTS_DIR/CodenotchCollector.app" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LoginItems/CodenotchCollector.app"
+          cp "$SRCROOT/Collector/com.r0llingclouds.codenotch.collector.plist" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LaunchAgents/"
+        basedOnDependencyAnalysis: false
     info:
       path: Sources/Info.plist
       properties:
@@ -132,6 +142,41 @@ targets:
         # Sources/Vendor/zstd/README.md. Delete this line and that directory
         # together if the Desktop source is ever dropped.
         SWIFT_OBJC_BRIDGING_HEADER: Sources/Codenotch-Bridging-Header.h
+
+  CodenotchCollector:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+        excludes: ["Vendor/**/README.md", "Widgets/*.entitlements", "Info.plist"]
+      - path: Shared
+    dependencies:
+      - package: SwiftNIO
+        product: NIOHTTP1
+      - package: SwiftNIO
+        product: NIOPosix
+    info:
+      path: Collector/Info.plist
+      properties:
+        CFBundleName: Codenotch Background
+        CFBundleDisplayName: Codenotch Background
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CodenotchPersonalFork: true
+        CodenotchCollector: true
+        CodenotchUsesAppGroup: "$(CODENOTCH_USES_APP_GROUP)"
+        LSUIElement: true
+        SUEnableAutomaticChecks: false
+        SUAutomaticallyUpdate: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.collector
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) PERSONAL_WIDGETS"
+        CODE_SIGN_ENTITLEMENTS: "$(CODENOTCH_APP_ENTITLEMENTS)"
+        GENERATE_INFOPLIST_FILE: "NO"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/Codenotch-Bridging-Header.h
+        SKIP_INSTALL: "YES"
 
   CodenotchWidget:
     type: app-extension
