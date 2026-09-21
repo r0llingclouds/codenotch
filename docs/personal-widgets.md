@@ -127,7 +127,10 @@ releases. This fork uses `com.r0llingclouds.codenotch`, so its preferences and
 WidgetKit extension are distinct from upstream. Upstream automatic updates are
 disabled so they cannot overwrite the fork. The personal app does not link the
 Sparkle framework; this also avoids its Team ID mismatch in ad-hoc builds.
-Update by rebuilding this checkout.
+Update by rebuilding this checkout. Debug app, collector and widget targets use
+separate development bundle identifiers. Build products are not registered with
+Launch Services automatically, so building/tests cannot redirect the installed
+background agent or desktop widget to a temporary executable.
 
 Open Codenotch once. In macOS, right-click the desktop, choose **Edit Widgets**,
 search **Codenotch**, then add the desired widget. The same widgets work in

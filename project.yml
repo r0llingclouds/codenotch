@@ -34,6 +34,9 @@ settings:
     ENABLE_HARDENED_RUNTIME: "YES"
     ENABLE_APP_SANDBOX: "NO"
     ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+    # Building a copy must not redirect SMAppService's bundle lookup away from
+    # the installed app. Test hosts additionally use distinct bundle IDs below.
+    REGISTER_APP_WITH_LAUNCH_SERVICES: "NO"
 
 packages:
   SwiftNIO:
@@ -142,6 +145,9 @@ targets:
         # Sources/Vendor/zstd/README.md. Delete this line and that directory
         # together if the Desktop source is ever dropped.
         SWIFT_OBJC_BRIDGING_HEADER: Sources/Codenotch-Bridging-Header.h
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.development
 
   CodenotchCollector:
     type: application
@@ -177,6 +183,9 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_OBJC_BRIDGING_HEADER: Sources/Codenotch-Bridging-Header.h
         SKIP_INSTALL: "YES"
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.development.collector
 
   CodenotchWidget:
     type: app-extension
@@ -209,6 +218,9 @@ targets:
         GENERATE_INFOPLIST_FILE: "NO"
         APPLICATION_EXTENSION_API_ONLY: "YES"
         SKIP_INSTALL: "YES"
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.development.widget
 
   CodenotchTests:
     type: bundle.unit-test

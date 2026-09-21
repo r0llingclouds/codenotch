@@ -33,6 +33,10 @@ final class CollectorService: ObservableObject {
 
     func enable() {
         guard !Runtime.isUnderTest else { return }
+        guard Bundle.main.bundleIdentifier == "com.r0llingclouds.codenotch" else {
+            error = L10n.t("Background collection is managed by the installed Release app.")
+            return
+        }
         error = nil
         do {
             if service.status == .notRegistered || service.status == .notFound {
