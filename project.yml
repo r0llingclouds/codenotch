@@ -90,7 +90,7 @@ targets:
         CodenotchUsesAppGroup: "$(CODENOTCH_USES_APP_GROUP)"
         CFBundleURLTypes:
           - CFBundleURLName: Usage widgets
-            CFBundleURLSchemes: [codenotch-usage]
+            CFBundleURLSchemes: ["$(CODENOTCH_URL_SCHEME)"]
         CFBundleDevelopmentRegion: en
         CFBundleLocalizations:
           - en
@@ -132,6 +132,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch
+        CODENOTCH_URL_SCHEME: codenotch-usage
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) PERSONAL_WIDGETS"
         CODE_SIGN_ENTITLEMENTS: "$(CODENOTCH_APP_ENTITLEMENTS)"
         GENERATE_INFOPLIST_FILE: "NO"
@@ -148,6 +149,7 @@ targets:
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.development
+          CODENOTCH_URL_SCHEME: codenotch-usage-development
 
   CodenotchCollector:
     type: application

@@ -37,7 +37,7 @@
 			<string>Usage widgets</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>codenotch-usage</string>
+				<string>$(CODENOTCH_URL_SCHEME)</string>
 			</array>
 		</dict>
 	</array>
