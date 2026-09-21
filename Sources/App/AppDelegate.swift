@@ -3,8 +3,14 @@ import Combine
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var collector: UsageCollectorRuntime?
+    private var collectorClient: CollectorDashboardClient?
     private var notchFleet: NotchFleet?
     private var store: UsageStore?
+    private var widgetPublisher: WidgetSnapshotPublisher?
+    private var dashboard: UsageDashboardWindowController?
+    private var pendingDashboardRoute: UsageDashboardRoute?
+    private var didPresentDashboardRoute = false
     var phoneLinkServer: PhoneLinkServer?
     var phoneLinkServerStatus: PhoneLinkServerStatus?
     var phoneLinkPairing: PhoneLinkPairing?
@@ -82,15 +88,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the app registered as a UIElement with no Dock tile, which looked
         // exactly like the icon having failed to install. The user's choice
         // replaces this a moment later, once preferences exist.
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(Runtime.isCollector ? .accessory : .regular)
         guard !isRunningTests else { return }
         Self.retireOlderInstances()
+        if Runtime.isPersonal && !Runtime.isCollector && CommandLine.arguments.contains("--prepare-update") {
+            NSApp.setActivationPolicy(.accessory)
+            Task {
+                do { try await CollectorService.prepareForUpdate(); NSApp.terminate(nil) }
+                catch {
+                    FileHandle.standardError.write(Data("Cannot stop background collector: \(error.localizedDescription)\n".utf8))
+                    exit(EXIT_FAILURE)
+                }
+            }
+            return
+        }
 
         // Before Preferences reads anything, or the first launch flag and
         // every choice would be read from an empty domain.
-        Preferences.migrateFromPreviousName()
+        if (Bundle.main.object(forInfoDictionaryKey: "CodenotchPersonalFork") as? Bool == true) {
+            UserDefaults.codenotch.register(defaults: [
+                "notchVisibility": "hidden", "appPresence": "dock",
+                "connectedProviders": UsageWidgetSnapshot.catalogue.map(\.id),
+                "providerOrder": UsageWidgetSnapshot.catalogue.map(\.id)
+            ])
+        } else { Preferences.migrateFromPreviousName() }
         let preferences = Preferences()
         self.preferences = preferences
+
+        if Runtime.isCollector {
+            collector = UsageCollectorRuntime(preferences: preferences)
+            return
+        }
+        if Runtime.isPersonal {
+            let client = CollectorDashboardClient()
+            collectorClient = client
+            dashboard = UsageDashboardWindowController(model: client.model, preferences: preferences,
+                refreshAll: { [weak client] in client?.send("refreshAll") },
+                refreshProvider: { [weak client] in client?.send("refresh:" + $0) },
+                openSettings: { [weak client] in client?.send("settings") })
+            openDashboardRoute(pendingDashboardRoute ?? .overview)
+            pendingDashboardRoute = nil
+            return
+        }
 
         // One notch per display: the fleet owns a controller for each screen
         // the scope asks for and fans every reading out to all of them. The
@@ -122,8 +161,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Settings changes it, because the fetch URLs live on the site.
             let miniMaxWeb = WebSessionProvider(site: Sites.minimax(region: preferences.minimaxRegion))
             self.miniMaxWeb = miniMaxWeb
-            let webProviders: [WebSessionProvider] = [deepSeek, qianwen]
-            fleet.signInItems = [deepSeek, miniMaxWeb, qianwen].map { provider in
+            let googleProviders = GoogleUsagePages.sites.map { WebSessionProvider(site: $0) }
+            let webProviders: [WebSessionProvider] = [deepSeek, qianwen] + googleProviders
+            fleet.signInItems = (webProviders + [miniMaxWeb]).map { provider in
                 let name = provider.displayName
                 return (title: L10n.t("Sign in to \(name)…"),
                         action: { [weak provider] in provider?.presentSignIn() })
@@ -168,6 +208,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // order for a frame and then visibly shuffles.
                 order: preferences.providerOrder
             )
+            let widgetPublisher = WidgetSnapshotPublisher()
+            self.widgetPublisher = widgetPublisher
+            let history = UsageHistoryModel(url: UsageHistoryDatabase.defaultURL)
+            let dashboardModel = UsageDashboardModel(history: history)
+            store.onHistoryReading = { [weak history] snapshot, date in history?.record(snapshot, at: date) }
+            Publishers.CombineLatest(store.$snapshots, store.$disconnected)
+                .debounce(for: .seconds(1), scheduler: RunLoop.main)
+                .sink { [weak store, weak widgetPublisher, weak dashboardModel] snapshots, disconnected in
+                    guard let store else { return }
+                    let snapshot = WidgetSnapshotPublisher.makeSnapshot(
+                        snapshots, disconnected: disconnected, dates: store.widgetMeasurementDates)
+                    widgetPublisher?.publish(snapshot)
+                    dashboardModel?.snapshot = snapshot
+                    dashboardModel?.plans = Dictionary(uniqueKeysWithValues: snapshots.compactMap {
+                        guard !disconnected.contains($0.id), let plan = $0.plan else { return nil }
+                        return ($0.id, plan)
+                    })
+                }.store(in: &cancellables)
+            store.$refreshing
+                .receive(on: RunLoop.main)
+                .sink { [weak dashboardModel] in dashboardModel?.refreshing = $0 }
+                .store(in: &cancellables)
+            for provider in googleProviders {
+                provider.onAuthenticated = { [weak store, weak provider] in
+                    guard let provider else { return }
+                    store?.providerAuthenticationChanged(providerID: provider.id)
+                }
+            }
             deepSeek.onAuthenticated = { [weak store] in
                 store?.providerAuthenticationChanged(providerID: "deepseek")
             }
@@ -353,6 +421,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { _ = await SessionFocus.focus(pid: pid) }
             }
             self.settings = settings
+            let dashboard = UsageDashboardWindowController(
+                model: dashboardModel, preferences: preferences,
+                refreshAll: { [weak store] in store?.refreshNow() },
+                refreshProvider: { [weak store] in store?.refresh(providerID: $0) },
+                openSettings: { [weak settings] in settings?.show() })
+            self.dashboard = dashboard
+            dashboard.keepRegularPresence = { [weak settings] in settings?.isVisible == true }
+            settings.keepRegularPresence = { [weak dashboard] in dashboard?.isVisible == true }
 
             // What changed, once per version — including on a fresh install,
             // where it is the introduction.
@@ -361,16 +437,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             self.whatsNew = whatsNew
 
-            // An agent app has no dock icon and no window: installed and
-            // launched, it shows four empty rings on a screen edge and no
-            // reason to look at them. Once, on the very first run, it opens the
-            // one place that explains what to connect.
-            //
-            // Sequenced behind What's New rather than beside it: two windows
-            // arriving together is one to dismiss before you can read either.
-            let introduce = { [weak settings] in
-                guard preferences.isFirstLaunch else { return }
-                settings?.show()
+            // Show one destination after the introduction. A widget link may
+            // arrive before the store and its windows have been constructed.
+            let introduce = { [weak self] in
+                guard let self, !self.didPresentDashboardRoute else { return }
+                let route = self.pendingDashboardRoute ?? .overview
+                self.pendingDashboardRoute = nil
+                self.openDashboardRoute(route)
             }
             whatsNew.onDismiss = introduce
             if !whatsNew.showIfNeeded() {
@@ -379,6 +452,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let statusItem = StatusItemController { [weak settings] in settings?.show() }
             self.statusItem = statusItem
+            statusItem.onOpenDashboard = { [weak self] in self?.openDashboard() }
             statusItem.onRefreshProvider = { [weak store] id in store?.refresh(providerID: id) }
             statusItem.onRefreshAll = { [weak store] in store?.refreshNow() }
             // Read when the menu opens, so a model's line is as current as its cell.
@@ -392,8 +466,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             preferences.$appPresence
                 .receive(on: RunLoop.main)
-                .sink { presence in
-                    NSApp.setActivationPolicy(presence.activationPolicy)
+                .sink { [weak dashboard, weak settings] presence in
+                    let hasWindow = dashboard?.isVisible == true || settings?.isVisible == true
+                    NSApp.setActivationPolicy(hasWindow ? .regular : presence.activationPolicy)
                     if presence.wantsStatusItem { statusItem.show() } else { statusItem.hide() }
                 }
                 .store(in: &cancellables)
@@ -931,11 +1006,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.showResetAlert(demo, duration: 6.0)
     }
 
-    /// Closing the settings window must not take the app with it.
-    ///
-    /// The default for a Dock app is to quit once its last window closes, which
-    /// here would kill the notch — the part that is actually the product —
-    /// every time someone shut the settings they had just opened.
+    /// Both native windows may close while the background store continues to
+    /// feed the widgets, menu bar and optional notch.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
@@ -945,14 +1017,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// With no dock icon, no menu bar item and no notch on screen, there is
     /// otherwise nothing left to click — choosing Hide would be a one-way door.
     /// Launching the app again while it is already running lands here, so
-    /// opening it from Applications or Spotlight reopens settings.
+    /// opening it from Applications or Spotlight brings back the dashboard.
     func applicationShouldHandleReopen(_ sender: NSApplication,
                                        hasVisibleWindows: Bool) -> Bool {
-        openSettings()
+        openDashboard()
         return true
     }
 
-    @MainActor func openSettings() { settings?.show() }
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let route = urls.compactMap({ UsageDashboardRoute(url: $0) }).last else { return }
+        openDashboardRoute(route)
+    }
+
+    @MainActor private func openDashboardRoute(_ route: UsageDashboardRoute) {
+        guard dashboard != nil else { pendingDashboardRoute = route; return }
+        didPresentDashboardRoute = true
+        switch route {
+        case .overview: openDashboard()
+        case .provider(let id): dashboard?.show(providerID: id)
+        case .settings: openSettings()
+        }
+    }
+
+    @MainActor func openDashboard() {
+        if Runtime.isCollector {
+            NSWorkspace.shared.open(URL(string: "codenotch-usage://dashboard")!)
+            return
+        }
+        guard let dashboard else { pendingDashboardRoute = .overview; return }
+        didPresentDashboardRoute = true
+        dashboard.show()
+    }
+
+    @MainActor func openSettings() {
+        if let collector { collector.openSettings() }
+        else if let collectorClient { collectorClient.send("settings") }
+        else { settings?.show() }
+    }
+    @MainActor func closeCollectorSettings() { collector?.closeSettings() }
+
     @MainActor func openConnectPhone() {
         guard PhoneLink.isAvailable, let pairing = phoneLinkPairing, let registry = phoneLinkRegistry, let status = phoneLinkServerStatus else { return }
         if preferences?.phoneLinkEnabled == false { preferences?.phoneLinkEnabled = true }
@@ -960,6 +1063,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        collector?.stop()
         ollamaRelay?.configure(enabled: false, endpoint: OllamaEndpoint.defaultAddress)
         lmstudioMetrics?.stop()
         tokenRefresher?.stop()

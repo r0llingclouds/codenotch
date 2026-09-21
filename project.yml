@@ -1,6 +1,6 @@
 name: Codenotch
 options:
-  bundleIdPrefix: com.vinz
+  bundleIdPrefix: com.r0llingclouds
   deploymentTarget:
     macOS: "15.0"
   createIntermediateGroups: true
@@ -10,20 +10,20 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
+    CODENOTCH_USES_APP_GROUP: "NO"
+    CODENOTCH_APP_ENTITLEMENTS: Sources/Widgets/LocalApp.entitlements
+    CODENOTCH_WIDGET_ENTITLEMENTS: Widgets/LocalWidget.entitlements
     # Sparkle compares CFBundleVersion to decide what is newer, and
     # Sources/Info.plist reads both from here — hardcoding them there instead
     # silently pins every build to one version, so no customer ever sees an
     # update. Bump CURRENT_PROJECT_VERSION on every release.
     MARKETING_VERSION: "1.16.0"
-    CURRENT_PROJECT_VERSION: "19"
-    # Signed with a stable identity on purpose. The app reads Claude Code's
-    # OAuth token out of the login keychain, and the keychain's ACL remembers
-    # *which signed binary* was allowed. Ad-hoc or unsigned builds get a new
-    # identity on every rebuild, so "Always Allow" would be forgotten each time
-    # and the prompt would come back after every `make run`.
-    CODE_SIGN_IDENTITY: "Developer ID Application"
-    CODE_SIGN_STYLE: Manual
-    DEVELOPMENT_TEAM: 6WFPL8B9FB
+    CURRENT_PROJECT_VERSION: "31"
+    # Personal builds are ad-hoc signed. A stable development identity can
+    # be supplied locally to retain Keychain approval across rebuilds.
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
     CODE_SIGNING_REQUIRED: "YES"
     CODE_SIGNING_ALLOWED: "YES"
     # Required by notarization. Worth knowing what it does *not* break here:
@@ -34,6 +34,9 @@ settings:
     ENABLE_HARDENED_RUNTIME: "YES"
     ENABLE_APP_SANDBOX: "NO"
     ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+    # Building a copy must not redirect SMAppService's bundle lookup away from
+    # the installed app. Test hosts additionally use distinct bundle IDs below.
+    REGISTER_APP_WITH_LAUNCH_SERVICES: "NO"
 
 packages:
   SwiftNIO:
@@ -55,12 +58,25 @@ targets:
           # copy any unrecognised file into the app bundle's Resources, and a
           # developer README has no business shipping to users.
           - "Vendor/**/README.md"
+          - "Widgets/*.entitlements"
+      - path: Shared
     dependencies:
-      - package: Sparkle
+      - target: CodenotchWidget
+        embed: true
+      - target: CodenotchCollector
+        embed: false
       - package: SwiftNIO
         product: NIOHTTP1
       - package: SwiftNIO
         product: NIOPosix
+    postBuildScripts:
+      - name: Embed background collector
+        script: |
+          set -eu
+          mkdir -p "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LoginItems" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LaunchAgents"
+          ditto "$BUILT_PRODUCTS_DIR/CodenotchCollector.app" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LoginItems/CodenotchCollector.app"
+          cp "$SRCROOT/Collector/com.r0llingclouds.codenotch.collector.plist" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LaunchAgents/"
+        basedOnDependencyAnalysis: false
     info:
       path: Sources/Info.plist
       properties:
@@ -70,6 +86,11 @@ targets:
         # and no obvious way to reach settings or quit.
         CFBundleName: Codenotch
         CFBundleDisplayName: Codenotch
+        CodenotchPersonalFork: true
+        CodenotchUsesAppGroup: "$(CODENOTCH_USES_APP_GROUP)"
+        CFBundleURLTypes:
+          - CFBundleURLName: Usage widgets
+            CFBundleURLSchemes: ["$(CODENOTCH_URL_SCHEME)"]
         CFBundleDevelopmentRegion: en
         CFBundleLocalizations:
           - en
@@ -96,21 +117,24 @@ targets:
         #
         # Must stay reachable for as long as any copy is installed: the feed is
         # the only route by which a shipped build can ever be replaced.
-        SUFeedURL: https://hivinz.com/appcast.xml
+        # No upstream Sparkle feed: it would overwrite this fork.
         # The public half of the EdDSA key in the login keychain. Sparkle
         # refuses any update not signed by its private half, so a hijacked feed
         # or a swapped download cannot install code. Losing the private key
         # means no existing install can ever be updated again — back it up.
-        SUPublicEDKey: rmUfT5r49nR+3HdkbR5/YYLghfnAi6L49eOk3sIegSk=
+
         # Set explicitly so Sparkle never asks on first launch. Left unset, it
         # shows a "check for updates automatically?" prompt, which is exactly
         # the permission this is meant to avoid.
-        SUEnableAutomaticChecks: true
-        SUAutomaticallyUpdate: true
+        SUEnableAutomaticChecks: false
+        SUAutomaticallyUpdate: false
         SUScheduledCheckInterval: 86400
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.vinz.codenotch
+        PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch
+        CODENOTCH_URL_SCHEME: codenotch-usage
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) PERSONAL_WIDGETS"
+        CODE_SIGN_ENTITLEMENTS: "$(CODENOTCH_APP_ENTITLEMENTS)"
         GENERATE_INFOPLIST_FILE: "NO"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_EMIT_LOC_STRINGS: "YES"
@@ -122,6 +146,83 @@ targets:
         # Sources/Vendor/zstd/README.md. Delete this line and that directory
         # together if the Desktop source is ever dropped.
         SWIFT_OBJC_BRIDGING_HEADER: Sources/Codenotch-Bridging-Header.h
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.development
+          CODENOTCH_URL_SCHEME: codenotch-usage-development
+
+  CodenotchCollector:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+        excludes: ["Vendor/**/README.md", "Widgets/*.entitlements", "Info.plist"]
+      - path: Shared
+    dependencies:
+      - package: SwiftNIO
+        product: NIOHTTP1
+      - package: SwiftNIO
+        product: NIOPosix
+    info:
+      path: Collector/Info.plist
+      properties:
+        CFBundleName: Codenotch Background
+        CFBundleDisplayName: Codenotch Background
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CodenotchPersonalFork: true
+        CodenotchCollector: true
+        CodenotchUsesAppGroup: "$(CODENOTCH_USES_APP_GROUP)"
+        LSUIElement: true
+        SUEnableAutomaticChecks: false
+        SUAutomaticallyUpdate: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.collector
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) PERSONAL_WIDGETS"
+        CODE_SIGN_ENTITLEMENTS: "$(CODENOTCH_APP_ENTITLEMENTS)"
+        GENERATE_INFOPLIST_FILE: "NO"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/Codenotch-Bridging-Header.h
+        SKIP_INSTALL: "YES"
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.development.collector
+
+  CodenotchWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Widgets
+        excludes: ["*.entitlements", "Info.plist"]
+      - path: Shared
+      - path: Sources/Providers/GlyphOutline.swift
+      - path: Sources/Assets.xcassets
+      - path: Sources/L10n.swift
+      - path: Sources/Settings/AppLanguage.swift
+      - path: Sources/Localizable.xcstrings
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Codenotch Usage
+        CodenotchUsesAppGroup: "$(CODENOTCH_USES_APP_GROUP)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.widget
+        CODE_SIGN_ENTITLEMENTS: "$(CODENOTCH_WIDGET_ENTITLEMENTS)"
+        ENABLE_APP_SANDBOX: "YES"
+        GENERATE_INFOPLIST_FILE: "NO"
+        APPLICATION_EXTENSION_API_ONLY: "YES"
+        SKIP_INSTALL: "YES"
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.development.widget
 
   CodenotchTests:
     type: bundle.unit-test
@@ -130,9 +231,10 @@ targets:
       - path: Tests
     dependencies:
       - target: Codenotch
+      - package: Sparkle
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.vinz.codenotch.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.r0llingclouds.codenotch.tests
         GENERATE_INFOPLIST_FILE: "YES"
 
 schemes:

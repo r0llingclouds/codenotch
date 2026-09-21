@@ -5,10 +5,9 @@ import os
 /// the OAuth token the CLI stores on sign-in — see `KimiCredentials`.
 ///
 /// The numbers are Kimi's, so this is `.official`. The token expires every
-/// fifteen minutes and the CLI renews it as it runs; an expired one is
-/// `.credentialExpired`, the same answer Grok gives, because minting a new
-/// token here would race the CLI for the file. A 404 is the endpoint's own
-/// answer for an account with no Kimi Code plan — readable, but metering
+/// fifteen minutes. Refreshes coordinate with the CLI's storage lock so
+/// Codenotch can keep reading while the terminal is closed. A 404 is the
+/// endpoint's answer for an account with no Kimi Code plan — readable, but metering
 /// nothing, and not an error.
 actor KimiProvider: UsageProvider {
     nonisolated let id = "kimi"
@@ -16,24 +15,28 @@ actor KimiProvider: UsageProvider {
     nonisolated let glyph = ProviderGlyph.kimi
 
     private let session: URLSession
-    private let authURL: URL
+    private let refresher: KimiTokenRefresher
 
-    init(session: URLSession = .shared, authURL: URL = KimiCredentials.authURL) {
+    init(session: URLSession = .shared, authURL: URL = KimiCredentials.authURL,
+         refresher: KimiTokenRefresher? = nil) {
         self.session = session
-        self.authURL = authURL
+        self.refresher = refresher ?? KimiTokenRefresher(authURL: authURL)
     }
 
     nonisolated var signInRoute: SignInRoute {
-        .guidance(L10n.t("Run kimi and sign in with /login — it writes and refreshes the token this reads."))
+        .guidance(L10n.t("Run kimi and sign in with /login — Codenotch renews the saved session automatically."))
     }
 
     nonisolated func account() -> ProviderAccount? { KimiCredentials.account() }
 
     func fetchSnapshot() async throws -> ProviderSnapshot {
-        let credentials = try KimiCredentials.load(from: authURL)
-        if credentials.isExpired { throw UsageProviderError.credentialExpired }
-
-        let body = try await fetch(token: credentials.accessToken)
+        let credentials = try await refresher.credentials()
+        let body: String
+        do { body = try await fetch(token: credentials.accessToken, endpoint: credentials.endpoint) }
+        catch UsageProviderError.needsAuth {
+            let renewed = try await refresher.credentials(rejectedAccessToken: credentials.accessToken)
+            body = try await fetch(token: renewed.accessToken, endpoint: renewed.endpoint)
+        }
         Log.usage.debug("kimi usages -> \(body.prefix(400), privacy: .public)")
         let read = try KimiUsage.read(fromJSON: body)
 
@@ -50,13 +53,14 @@ actor KimiProvider: UsageProvider {
         )
     }
 
-    private func fetch(token: String) async throws -> String {
-        var request = URLRequest(url: KimiUsage.endpoint)
+    private func fetch(token: String, endpoint: URL) async throws -> String {
+        var request = URLRequest(url: endpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Codenotch/1.16.0", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 15
 
-        Log.usage.debug("GET api.kimi.com/coding/v1/usages")
+        Log.usage.debug("GET Kimi coding usage")
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         Log.usage.debug("kimi usages endpoint answered \(status)")

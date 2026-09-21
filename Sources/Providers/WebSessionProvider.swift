@@ -100,6 +100,8 @@ final class WebSessionProvider: NSObject, UsageProvider {
         /// endpoints that have throttled this app, and polling them while
         /// someone types a password is how that happened.
         let pollsDuringSignIn: Bool
+        let reloadBeforeFetch: Bool
+        let dataStoreIdentifier: UUID?
         /// The page under `origin` where this account's plan or usage can be
         /// seen — what the settings row's manage link opens. A path rather
         /// than a whole URL because it is always a page on the site the user
@@ -118,6 +120,8 @@ final class WebSessionProvider: NSObject, UsageProvider {
              authProbeScript: String? = nil,
              associatedHosts: [String] = [],
              pollsDuringSignIn: Bool = false,
+             reloadBeforeFetch: Bool = false,
+             dataStoreIdentifier: UUID? = nil,
              managePath: String = "usage",
              detailParse: ((String) throws -> ProviderUsageDetail?)? = nil,
              parse: @escaping (String) throws -> [LimitWindow]) {
@@ -130,6 +134,8 @@ final class WebSessionProvider: NSObject, UsageProvider {
             self.authProbeScript = authProbeScript
             self.associatedHosts = associatedHosts
             self.pollsDuringSignIn = pollsDuringSignIn
+            self.reloadBeforeFetch = reloadBeforeFetch
+            self.dataStoreIdentifier = dataStoreIdentifier
             self.managePath = managePath
             self.detailParse = detailParse
             self.parse = parse
@@ -148,7 +154,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
     /// usage payload we read, but the persisted session is enough to keep the
     /// settings row in its signed-in state after the sheet is reopened.
     nonisolated func account() -> ProviderAccount? {
-        guard UserDefaults.standard.bool(forKey: "\(id).signedIn") else { return nil }
+        guard UserDefaults.codenotch.bool(forKey: "\(id).signedIn") else { return nil }
         return ProviderAccount(
             label: nil,
             plan: nil,
@@ -198,11 +204,16 @@ final class WebSessionProvider: NSObject, UsageProvider {
     /// Keyed by the provider's identity, not `site.id`, so a mistaken
     /// `apply(site:)` cannot rebind DeepSeek's flag onto MiniMax or vice versa.
     private var hasSignedIn: Bool {
-        get { UserDefaults.standard.bool(forKey: "\(id).signedIn") }
-        set { UserDefaults.standard.set(newValue, forKey: "\(id).signedIn") }
+        get { UserDefaults.codenotch.bool(forKey: "\(id).signedIn") }
+        set { UserDefaults.codenotch.set(newValue, forKey: "\(id).signedIn") }
     }
 
     // MARK: - The browser
+
+    private var websiteDataStore: WKWebsiteDataStore {
+        if let identifier = site.dataStoreIdentifier { return WKWebsiteDataStore(forIdentifier: identifier) }
+        return .default()
+    }
 
     nonisolated static func matchesOrigin(_ url: URL?, expected origin: URL) -> Bool {
         guard let url,
@@ -250,7 +261,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
     private func makeWebViewIfNeeded() -> WKWebView {
         if let webView { return webView }
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()   // persists across launches
+        configuration.websiteDataStore = websiteDataStore
         // Records the API calls the page makes, so an endpoint can be found by
         // watching the site rather than by guessing at path names. Injected at
         // document start, because the interesting calls happen during load.
@@ -301,6 +312,10 @@ final class WebSessionProvider: NSObject, UsageProvider {
 
     func fetchSnapshot() async throws -> ProviderSnapshot {
         guard hasSignedIn else { throw UsageProviderError.needsAuth }
+        if site.reloadBeforeFetch {
+            guard signInWindow == nil else { throw UsageProviderError.timedOut }
+            isLoaded = false
+        }
         try await ensureLoaded()
         guard let webView else { throw UsageProviderError.needsAuth }
 
@@ -341,7 +356,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
         // Not for sites whose response carries account details beyond the
         // numbers: DeepSeek's, and QianwenAI's console envelope, whose other
         // fields are undocumented.
-        if ["deepseek", "qianwenai"].contains(site.id) {
+        if ["deepseek", "qianwenai", "gemini-chat", "notebooklm", "google-flow"].contains(site.id) {
             Log.usage.notice("\(self.site.id, privacy: .public) usage response received")
         } else {
             Log.usage.notice("\(self.site.id, privacy: .public) usage -> \(body.prefix(1200), privacy: .public)")
@@ -417,7 +432,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
 
         let hosts = Self.websiteDataHosts(for: site)
         guard !hosts.isEmpty else { return }
-        let store = WKWebsiteDataStore.default()
+        let store = websiteDataStore
         let types = WKWebsiteDataStore.allWebsiteDataTypes()
         let records = await store.dataRecords(ofTypes: types).filter { record in
             let name = record.displayName.lowercased()

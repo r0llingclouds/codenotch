@@ -7,6 +7,12 @@
 ![Swift](https://img.shields.io/badge/swift-5-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+> **Personal usage dashboard:** a native macOS app with desktop and Notification
+> Center widgets for Codex, Claude, Cursor, Kimi, GLM, DeepSeek, Gemini chat,
+> NotebookLM and Flow.
+> See [setup, sign-in and current limitations](docs/personal-widgets.md).
+> Build this checkout for the widgets; upstream downloads below do not include them.
+
 **A macOS app that pins a small black notch to a screen edge, showing how much
 of each coding assistant's usage limit you have burned — and whether it is
 still working, done, or waiting on you.**
