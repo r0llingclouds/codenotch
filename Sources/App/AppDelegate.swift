@@ -210,7 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             let widgetPublisher = WidgetSnapshotPublisher()
             self.widgetPublisher = widgetPublisher
-            let history = UsageHistoryModel(url: UsageHistoryDatabase.defaultURL)
+            let history = UsageHistoryModel.live()
             let dashboardModel = UsageDashboardModel(history: history)
             store.onHistoryReading = { [weak history] snapshot, date in history?.record(snapshot, at: date) }
             Publishers.CombineLatest(store.$snapshots, store.$disconnected)

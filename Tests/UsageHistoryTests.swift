@@ -141,26 +141,27 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(days[2].date.timeIntervalSince(days[1].date), 25 * 3600)
     }
 
-    func testChartSegmentsDoNotBridgeOfflinePeriodsOrResets() {
+    func testChartKeepsEveryReadingUntilDownsamplingAndThenPreservesPeaks() {
         let points = [point(0, 10), point(5, 15), point(60, 30), point(65, 5, reset: day)]
-        XCTAssertEqual(UsageHistoryAnalysis.chartPoints(points).map(\.segment), [0, 0, 1, 2])
+        XCTAssertEqual(UsageHistoryAnalysis.chartPoints(points), points)
         var many = (0..<5000).map { point(Double($0), 10) }
         many[2250] = point(2250, 99)
         let plotted = UsageHistoryAnalysis.chartPoints(many)
         XCTAssertLessThanOrEqual(plotted.count, 600)
-        XCTAssertTrue(plotted.contains { $0.point.value == 99 })
-        XCTAssertEqual(plotted.first?.point, many.first)
-        XCTAssertEqual(plotted.last?.point, many.last)
+        XCTAssertTrue(plotted.contains { $0.value == 99 })
+        XCTAssertEqual(plotted.first, many.first)
+        XCTAssertEqual(plotted.last, many.last)
+        XCTAssertEqual(plotted.map(\.date), plotted.map(\.date).sorted())
     }
 
-    func testGlobalViewKeepsFableAndDoesNotAddOverlappingClaudeQuotas() throws {
+    func testGlobalViewShowsClaudeTotalAndDoesNotAddOverlappingQuotas() throws {
         let records = UsageHistoryRecord.readings(from: snapshot([
             LimitWindow(id: "session", label: "Session", usedFraction: 0.1),
             LimitWindow(id: "weekly_all", label: "All models", usedFraction: 0.2),
             LimitWindow(id: "weekly_scoped", label: "Fable", usedFraction: 0.3)]), at: day)
         let chosen = try XCTUnwrap(UsageHistoryGlobal.primarySeries(providerID: "claude", catalogue: records.map(\.series)))
-        XCTAssertTrue(chosen.isFable)
-        XCTAssertEqual(chosen.meterID, "weekly_scoped")
+        XCTAssertFalse(chosen.isFable, "Every service is shown by its whole allowance, not by one model's")
+        XCTAssertEqual(chosen.meterID, "weekly_all")
         XCTAssertNil(UsageHistoryGlobal.primarySeries(providerID: "deepseek", catalogue: records.map(\.series)))
     }
 
@@ -214,11 +215,11 @@ final class UsageHistoryTests: XCTestCase {
         await fulfillment(of: [loaded], timeout: 5)
         XCTAssertNil(model.error)
         XCTAssertTrue(model.showsAllQuotas)
-        XCTAssertEqual(model.providerTrends.map(\.series.meterID), ["weekly_scoped", "session", "weekly_all"])
+        XCTAssertEqual(model.providerTrends.map(\.series.meterID), ["weekly_all", "weekly_scoped", "session"])
         XCTAssertEqual(Set(model.providerTrends.map(\.series.id)).count, 3)
         XCTAssertEqual(model.providerTrends.map { $0.points.count }, [2, 2, 2])
         XCTAssertEqual(model.exportableTrends.count, 3)
-        XCTAssertEqual(model.providerTrends.compactMap { $0.points.last?.value }, [26, 12, 19])
+        XCTAssertEqual(model.providerTrends.compactMap { $0.points.last?.value }, [19, 26, 12])
 
         let narrowed = expectation(description: "Date range applied to every quota")
         let rangeSubscription = model.$isLoading.dropFirst().filter { !$0 }.first().sink { _ in narrowed.fulfill() }
@@ -230,6 +231,33 @@ final class UsageHistoryTests: XCTestCase {
         model.selectProvider("deepseek")
         XCTAssertFalse(model.showsAllQuotas)
         XCTAssertTrue(model.providerTrends.isEmpty, "Switching provider clears the Claude charts immediately")
+        XCTAssertTrue(UsageHistoryModel.showsAllQuotas("codex"), "Codex uses the same quota cards as Claude")
+    }
+
+    func testClaudeModelQuotaSavedUnderTwoNamesIsOneQuota() {
+        func series(_ id: String, meter: String, label: String) -> UsageHistorySeries {
+            UsageHistoryRecord.readings(from: snapshot([LimitWindow(id: meter, label: label, usedFraction: 0.2)], id: id), at: day)[0].series
+        }
+        let cli = series("claude", meter: "weekly_fable", label: "Fable")
+        let endpoint = series("claude", meter: "weekly_scoped", label: "Fable 5.1")
+        let total = series("claude", meter: "weekly_all", label: "All models")
+        let opus = series("claude", meter: "weekly_scoped", label: "Opus")
+        let codex = [series("codex", meter: "primary", label: "Weekly limit"),
+                     series("codex", meter: "spark-secondary", label: "Weekly limit")]
+        XCTAssertEqual(UsageHistoryGlobal.quotas([total, cli, endpoint, opus]).map { $0.map(\.id) },
+                       [[total.id], [cli.id, endpoint.id], [opus.id]])
+        XCTAssertEqual(UsageHistoryGlobal.quotas(codex).count, 2, "A shared label alone does not make one quota")
+    }
+
+    func testTotalQuotaIsTheWeeklyWindowWhereAServiceReportsOne() {
+        func trends(_ id: String, _ meters: [String]) -> [UsageHistoryTrend] {
+            UsageHistoryRecord.readings(from: snapshot(meters.map { LimitWindow(id: $0, label: $0, usedFraction: 0.2) }, id: id), at: day)
+                .map { UsageHistoryTrend(series: $0.series, points: [$0.point], days: [], chartPoints: []) }
+        }
+        XCTAssertEqual(UsageHistoryGlobal.totalQuota(trends("claude", ["session", "weekly_scoped", "weekly_all"]))?.series.meterID, "weekly_all")
+        XCTAssertEqual(UsageHistoryGlobal.totalQuota(trends("codex", ["primary", "secondary", "spark"]))?.series.meterID, "secondary")
+        XCTAssertEqual(UsageHistoryGlobal.totalQuota(trends("codex", ["primary"]))?.series.meterID, "primary")
+        XCTAssertNil(UsageHistoryGlobal.totalQuota([]))
     }
 
     func testClaudeCSVIncludesEveryQuotaAndItsOwnValues() {

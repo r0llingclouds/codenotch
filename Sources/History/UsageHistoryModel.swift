@@ -7,10 +7,12 @@ final class UsageHistoryModel: ObservableObject {
     @Published private(set) var catalogue: [UsageHistorySeries] = []
     @Published private(set) var points: [UsageHistoryPoint] = []
     @Published private(set) var days: [UsageHistoryDay] = []
-    @Published private(set) var chartPoints: [UsageHistoryChartPoint] = []
+    @Published private(set) var chartPoints: [UsageHistoryPoint] = []
     @Published private(set) var trends: [UsageHistoryTrend] = []
     @Published private(set) var globalDays: [UsageHistoryDay] = []
     @Published private(set) var providerTrends: [UsageHistoryTrend] = []
+    @Published private(set) var modelUsage: [ModelUsageTrend] = []
+    @Published private(set) var isLoadingModelUsage = false
     @Published private(set) var isLoading = false
     @Published var recordingError = false
     @Published private(set) var error: String?
@@ -20,18 +22,31 @@ final class UsageHistoryModel: ObservableObject {
     @Published private(set) var start = Calendar.current.startOfDay(for: Date())
     @Published private(set) var end = Date()
     private let database: UsageHistoryDatabase?
+    private let localUsage: LocalModelUsage?
     private var loadTask: Task<Void, Never>?
+    private var modelUsageTask: Task<Void, Never>?
     private var selecting = false
 
-    init(url: URL? = nil) {
+    init(url: URL? = nil, localUsage: LocalModelUsage? = nil) {
+        self.localUsage = localUsage
         database = url.map { UsageHistoryDatabase(url: $0) }
         if database != nil { reload() }
+    }
+
+    /// What a dashboard shows: this Mac's saved readings beside its own session
+    /// logs. Every dashboard is built from here, so none can be left without one
+    /// of the two.
+    static func live() -> UsageHistoryModel {
+        UsageHistoryModel(url: UsageHistoryDatabase.defaultURL, localUsage: LocalModelUsage())
     }
 
     var availableSeries: [UsageHistorySeries] {
         catalogue.filter { $0.providerID == providerID }.sorted(by: UsageHistorySeries.displayOrder)
     }
-    var showsAllQuotas: Bool { providerID == "claude" }
+    var showsAllQuotas: Bool { Self.showsAllQuotas(providerID) }
+    var showsModelUsage: Bool { localUsage != nil && showsAllQuotas }
+    /// Services whose page is one card per quota rather than one picked series.
+    static func showsAllQuotas(_ providerID: String) -> Bool { ["claude", "codex"].contains(providerID) }
     var exportableTrends: [UsageHistoryTrend] {
         if showsAllQuotas { return providerTrends.filter { !$0.points.isEmpty } }
         guard let series = selectedSeries, !points.isEmpty else { return [] }
@@ -64,6 +79,8 @@ final class UsageHistoryModel: ObservableObject {
         guard !selecting else { return }
         // Never briefly display the previous provider's numbers with new units.
         points = []; chartPoints = []; days = []; trends = []; globalDays = []; providerTrends = []
+        modelUsageTask?.cancel(); modelUsageTask = nil
+        modelUsage = []; isLoadingModelUsage = false
         reload()
     }
 
@@ -76,6 +93,7 @@ final class UsageHistoryModel: ObservableObject {
         let calendar = Calendar.current
         let since = calendar.date(byAdding: .day, value: -(range - 1), to: calendar.startOfDay(for: now))!
         isLoading = true
+        reloadModelUsage(provider: provider, from: since, through: now, calendar: calendar)
         loadTask = Task {
             do {
                 let catalogue = try await database.catalogue()
@@ -97,12 +115,16 @@ final class UsageHistoryModel: ObservableObject {
                     }
                 }
                 var providerTrends: [UsageHistoryTrend] = []
-                if provider == "claude" {
-                    for series in available {
+                if Self.showsAllQuotas(provider) {
+                    for quota in UsageHistoryGlobal.quotas(available) {
                         guard !Task.isCancelled else { return }
-                        let readings: [UsageHistoryPoint]
-                        if series.id == selected?.id { readings = points }
-                        else { readings = try await database.points(for: series.id, from: since, through: now) }
+                        var readings: [UsageHistoryPoint] = []
+                        for series in quota {
+                            if series.id == selected?.id { readings += points }
+                            else { readings += try await database.points(for: series.id, from: since, through: now) }
+                        }
+                        if quota.count > 1 { readings.sort { $0.date < $1.date } }
+                        let series = quota[0]
                         providerTrends.append(UsageHistoryTrend(series: series, points: readings,
                             days: UsageHistoryAnalysis.daily(readings, kind: series.kind, from: since, through: now, calendar: calendar),
                             chartPoints: UsageHistoryAnalysis.chartPoints(readings)))
@@ -130,6 +152,21 @@ final class UsageHistoryModel: ObservableObject {
         }
     }
 
+    private func reloadModelUsage(provider: String, from start: Date, through end: Date, calendar: Calendar) {
+        // The first read of a month of session logs takes seconds. It runs
+        // beside the quota cards rather than holding them back, and a reload
+        // that arrives meanwhile must not start it over.
+        guard let localUsage, Self.showsAllQuotas(provider), modelUsageTask == nil else { return }
+        isLoadingModelUsage = modelUsage.isEmpty
+        modelUsageTask = Task {
+            let usage = await localUsage.usage(providerID: provider, from: start, through: end, calendar: calendar)
+            guard !Task.isCancelled else { return }
+            modelUsage = usage
+            isLoadingModelUsage = false
+            modelUsageTask = nil
+        }
+    }
+
     func formatted(_ value: Double?, delta: Bool = false) -> String {
         selectedSeries?.formatted(value, delta: delta) ?? "—"
     }
@@ -138,7 +175,7 @@ final class UsageHistoryModel: ObservableObject {
         let entries = exportableTrends
         guard let series = entries.first?.series else { return }
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = showsAllQuotas ? "codenotch-claude-history.csv" : "codenotch-\(series.providerID)-\(series.meterID).csv"
+        panel.nameFieldStringValue = showsAllQuotas ? "codenotch-\(series.providerID)-history.csv" : "codenotch-\(series.providerID)-\(series.meterID).csv"
         panel.allowedContentTypes = [.commaSeparatedText]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try UsageHistoryCSV.encode(entries).write(to: url, atomically: true, encoding: .utf8) }

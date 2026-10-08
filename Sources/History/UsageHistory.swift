@@ -208,12 +208,6 @@ struct UsageHistoryDay: Identifiable, Equatable {
     var consumed: Double?
 }
 
-struct UsageHistoryChartPoint: Identifiable {
-    var id: Date { point.date }
-    let point: UsageHistoryPoint
-    let segment: Int
-}
-
 enum UsageHistoryAnalysis {
     static let maximumGap: TimeInterval = 15 * 60
 
@@ -264,22 +258,14 @@ enum UsageHistoryAnalysis {
         return days
     }
 
-    static func chartPoints(_ points: [UsageHistoryPoint], limit: Int = 600) -> [UsageHistoryChartPoint] {
-        var segment = 0
-        var previous: UsageHistoryPoint?
-        let segmented = points.map { point -> UsageHistoryChartPoint in
-            if let prior = previous,
-               point.date.timeIntervalSince(prior.date) > maximumGap || !sameWindow(prior, point) { segment += 1 }
-            previous = point
-            return UsageHistoryChartPoint(point: point, segment: segment)
-        }
-        guard segmented.count > limit else { return segmented }
+    static func chartPoints(_ points: [UsageHistoryPoint], limit: Int = 600) -> [UsageHistoryPoint] {
+        guard points.count > limit else { return points }
         // Keep extrema and endpoints, so a brief peak survives downsampling.
-        let size = max(1, Int(ceil(Double(segmented.count) / Double(max(1, limit / 4)))))
-        return stride(from: 0, to: segmented.count, by: size).flatMap { start in
-            let bucket = Array(segmented[start..<min(start + size, segmented.count)])
-            let candidates = [bucket.first!, bucket.min { $0.point.value < $1.point.value }!,
-                              bucket.max { $0.point.value < $1.point.value }!, bucket.last!]
+        let size = max(1, Int(ceil(Double(points.count) / Double(max(1, limit / 4)))))
+        return stride(from: 0, to: points.count, by: size).flatMap { start in
+            let bucket = points[start..<min(start + size, points.count)]
+            let candidates = [bucket.first!, bucket.min { $0.value < $1.value }!,
+                              bucket.max { $0.value < $1.value }!, bucket.last!]
             return Dictionary(grouping: candidates, by: \.id).compactMap { $0.value.first }.sorted { $0.id < $1.id }
         }
     }

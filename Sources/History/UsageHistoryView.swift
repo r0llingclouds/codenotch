@@ -35,7 +35,7 @@ struct UsageHistoryView: View {
                 if model.providerID == "all" {
                     UsageHistoryGlobalView(model: model)
                 } else if model.showsAllQuotas {
-                    UsageHistoryClaudeView(model: model)
+                    UsageHistoryQuotasView(model: model)
                 } else {
                     summary
                     evolution
@@ -107,7 +107,7 @@ struct UsageHistoryView: View {
             }.pickerStyle(.segmented).labelsHidden().frame(width: 220)
             if model.providerID != "all" {
               Button(action: model.exportCSV) { Image(systemName: "square.and.arrow.up") }
-                .help(model.showsAllQuotas ? L10n.t("Export all Claude quotas as CSV") : L10n.t("Export this series as CSV"))
+                .help(model.showsAllQuotas ? L10n.t("Export all quotas as CSV") : L10n.t("Export this series as CSV"))
                 .accessibilityLabel(L10n.t("Export CSV"))
                 .disabled(model.exportableTrends.isEmpty)
             }
@@ -136,7 +136,7 @@ struct UsageHistoryView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(model.selectedSeries?.kind == .quota ? L10n.t("Quota evolution") : L10n.t("Balance & usage evolution"))
                         .font(.system(size: 15, weight: .semibold))
-                    Text(L10n.t("Each point is a saved reading. Gaps and resets break the line."))
+                    Text(L10n.t("The line joins saved readings, including across offline periods and resets."))
                         .font(.system(size: 11)).foregroundStyle(dashboardMuted)
                 }
                 Spacer()
@@ -250,22 +250,27 @@ struct HistoryStat: View {
 }
 
 struct HistoryEvolutionChart: View {
-    let points: [UsageHistoryChartPoint]
+    let points: [UsageHistoryPoint]
     let quota: Bool
     let start: Date
     let end: Date
     let tint: Color
     @Binding var selectedDate: Date?
-    private var upper: Double { max(quota ? 100 : 1, (points.map(\.point.value).max() ?? 0) * 1.1) }
+    private var upper: Double { max(quota ? 100 : 1, (points.map(\.value).max() ?? 0) * 1.1) }
     private var endOfDay: Date { Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: end))! }
     var body: some View {
         Chart {
-            ForEach(points) { item in
-                LineMark(x: .value(L10n.t("Time"), item.point.date), y: .value(L10n.t("Reading"), item.point.value),
-                         series: .value("Window", item.segment))
-                    .foregroundStyle(tint).lineStyle(StrokeStyle(lineWidth: 2.5))
-                PointMark(x: .value(L10n.t("Time"), item.point.date), y: .value(L10n.t("Reading"), item.point.value))
-                    .foregroundStyle(tint).symbolSize(points.count < 50 ? 28 : 5)
+            ForEach(points) { point in
+                // Straight segments on purpose. A reset is a near-vertical
+                // drop, and a smoothed curve through it is stroked with
+                // slivers that reach past 100 % and below zero.
+                LineMark(x: .value(L10n.t("Time"), point.date), y: .value(L10n.t("Reading"), point.value))
+                    .foregroundStyle(tint)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+            }
+            if points.count == 1, let point = points.first { // A lone reading has no line to draw.
+                PointMark(x: .value(L10n.t("Time"), point.date), y: .value(L10n.t("Reading"), point.value))
+                    .foregroundStyle(tint).symbolSize(28)
             }
             if quota {
                 RuleMark(y: .value(L10n.t("Limit"), 100))
@@ -277,7 +282,11 @@ struct HistoryEvolutionChart: View {
         }
         .chartXScale(domain: start...endOfDay).chartYScale(domain: 0...upper)
         .chartXSelection(value: $selectedDate)
-        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 6)) { _ in AxisValueLabel(format: start.distance(to: end) < 86_400 ? .dateTime.hour().minute() : .dateTime.day().month(.abbreviated)) } }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 6)) { _ in AxisValueLabel(format: start.distance(to: end) < 86_400 ? .dateTime.hour().minute() : .dateTime.day().month(.abbreviated)) }
+            // Calendar weeks, not reset moments: each service resets on its own day and hour.
+            AxisMarks(values: .stride(by: .weekOfYear)) { _ in AxisGridLine(stroke: StrokeStyle(lineWidth: 1)).foregroundStyle(.white.opacity(0.14)) }
+        }
         .chartYAxis { AxisMarks(position: .leading) { _ in AxisGridLine().foregroundStyle(.white.opacity(0.05)); AxisValueLabel() } }
         .chartLegend(.hidden)
     }

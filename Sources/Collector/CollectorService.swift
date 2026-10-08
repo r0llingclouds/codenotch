@@ -81,7 +81,7 @@ final class CollectorDashboardClient {
     private var statusObserver: AnyCancellable?
 
     init() {
-        model = UsageDashboardModel(history: UsageHistoryModel(url: UsageHistoryDatabase.defaultURL))
+        model = UsageDashboardModel(history: .live())
         model.collectorService = service
         statusObserver = service.objectWillChange.receive(on: RunLoop.main).sink { [weak self] _ in
             self?.load()

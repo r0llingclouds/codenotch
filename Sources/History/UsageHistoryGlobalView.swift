@@ -112,12 +112,12 @@ private struct HistoryTrendCard: View {
 }
 
 private struct HistorySparkline: View {
-    let points: [UsageHistoryChartPoint]
+    let points: [UsageHistoryPoint]
     let start: Date
     let end: Date
     let tint: Color
     private var visibleRange: ClosedRange<Date> {
-        guard let first = points.first?.point.date, let last = points.last?.point.date else { return start...end }
+        guard let first = points.first?.date, let last = points.last?.date else { return start...end }
         // Fit the available history: a new installation has minutes of data,
         // which would otherwise collapse to a vertical mark in a 30-day card.
         if first == last { return first.addingTimeInterval(-150)...last.addingTimeInterval(150) }
@@ -125,12 +125,14 @@ private struct HistorySparkline: View {
     }
     var body: some View {
         Chart {
-            ForEach(points) { item in
-                LineMark(x: .value(L10n.t("Time"), item.point.date), y: .value(L10n.t("Reading"), item.point.value),
-                    series: .value("Window", item.segment))
-                    .foregroundStyle(tint).lineStyle(StrokeStyle(lineWidth: 2))
-                PointMark(x: .value(L10n.t("Time"), item.point.date), y: .value(L10n.t("Reading"), item.point.value))
-                    .foregroundStyle(tint).symbolSize(points.count < 10 ? 13 : 3)
+            ForEach(points) { point in
+                LineMark(x: .value(L10n.t("Time"), point.date), y: .value(L10n.t("Reading"), point.value))
+                    .foregroundStyle(tint)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            }
+            if points.count == 1, let point = points.first {
+                PointMark(x: .value(L10n.t("Time"), point.date), y: .value(L10n.t("Reading"), point.value))
+                    .foregroundStyle(tint).symbolSize(13)
             }
         }.chartXScale(domain: visibleRange).chartYScale(domain: .automatic(includesZero: false))
             .chartXAxis(.hidden).chartYAxis(.hidden).chartLegend(.hidden).accessibilityHidden(true)
@@ -145,19 +147,26 @@ private struct GlobalQuotaChart: View {
     var body: some View {
         Chart {
             ForEach(trends) { trend in
-                ForEach(trend.chartPoints) { item in
-                    LineMark(x: .value(L10n.t("Time"), item.point.date), y: .value(L10n.t("Quota used (%)"), item.point.value),
-                        series: .value("Window", "\(trend.id)-\(item.segment)"))
-                        .foregroundStyle(DashboardBrand.color(trend.id)).lineStyle(StrokeStyle(lineWidth: 2))
-                    PointMark(x: .value(L10n.t("Time"), item.point.date), y: .value(L10n.t("Quota used (%)"), item.point.value))
-                        .foregroundStyle(DashboardBrand.color(trend.id)).symbolSize(trend.chartPoints.count < 50 ? 22 : 3)
+                ForEach(trend.chartPoints) { point in
+                    LineMark(x: .value(L10n.t("Time"), point.date), y: .value(L10n.t("Quota used (%)"), point.value),
+                        series: .value("Service", trend.id))
+                        .foregroundStyle(DashboardBrand.color(trend.id))
+                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                        .accessibilityLabel(trend.name + ", " + trend.series.label)
+                }
+                if trend.chartPoints.count == 1, let point = trend.chartPoints.first {
+                    PointMark(x: .value(L10n.t("Time"), point.date), y: .value(L10n.t("Quota used (%)"), point.value))
+                        .foregroundStyle(DashboardBrand.color(trend.id)).symbolSize(22)
                         .accessibilityLabel(trend.name + ", " + trend.series.label)
                 }
             }
             RuleMark(y: .value(L10n.t("Limit"), 100))
                 .foregroundStyle(.white.opacity(0.15)).lineStyle(StrokeStyle(dash: [4, 4]))
         }.chartXScale(domain: start...end).chartYScale(domain: 0...maximum)
-            .chartXAxis { AxisMarks(values: .automatic(desiredCount: 6)) { _ in AxisValueLabel(format: .dateTime.day().month(.abbreviated)) } }
+            .chartXAxis {
+                AxisMarks(values: .automatic(desiredCount: 6)) { _ in AxisValueLabel(format: .dateTime.day().month(.abbreviated)) }
+                AxisMarks(values: .stride(by: .weekOfYear)) { _ in AxisGridLine(stroke: StrokeStyle(lineWidth: 1)).foregroundStyle(.white.opacity(0.14)) }
+            }
             .chartYAxis { AxisMarks(position: .leading) { _ in AxisGridLine().foregroundStyle(.white.opacity(0.05)); AxisValueLabel() } }
             .chartLegend(.hidden)
     }
