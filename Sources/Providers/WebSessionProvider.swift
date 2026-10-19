@@ -166,7 +166,9 @@ final class WebSessionProvider: NSObject, UsageProvider {
     /// `nonisolated(unsafe)` so `account()` can still read the origin the way
     /// DeepSeek does. Mutation stays on the main actor via `apply(site:)`.
     nonisolated(unsafe) private var site: Site
+    private let webViewFactory: (WKWebViewConfiguration) -> WKWebView
     private var webView: WKWebView?
+    private var isFetching = false
     private var signInWindow: NSWindow?
     private var signInProbeTask: Task<Void, Never>?
     private var isLoaded = false
@@ -178,8 +180,11 @@ final class WebSessionProvider: NSObject, UsageProvider {
 
     var onAuthenticated: (() -> Void)?
 
-    init(site: Site) {
+    init(site: Site, webViewFactory: @escaping (WKWebViewConfiguration) -> WKWebView = {
+        WKWebView(frame: NSRect(x: 0, y: 0, width: 1100, height: 800), configuration: $0)
+    }) {
         self.site = site
+        self.webViewFactory = webViewFactory
         self.id = site.id
         self.displayName = site.displayName
         self.glyph = site.glyph
@@ -287,14 +292,24 @@ final class WebSessionProvider: NSObject, UsageProvider {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         ))
-        let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1100, height: 800),
-                                configuration: configuration)
+        let webView = webViewFactory(configuration)
         self.webView = webView
         return webView
     }
 
-    private func ensureLoaded() async throws {
-        let webView = makeWebViewIfNeeded()
+    /// DOM-based providers reload on every fetch anyway. Keeping their old
+    /// page alive between readings held Gemini and NotebookLM's entire web
+    /// apps in the background collector (over 1.5 GB). Their persistent data
+    /// stores retain the login without retaining a live page.
+    private func releaseWebViewIfIdle(_ candidate: WKWebView?) {
+        guard site.reloadBeforeFetch, !isFetching, signInWindow == nil,
+              let candidate, candidate === webView else { return }
+        candidate.stopLoading()
+        webView = nil
+        isLoaded = false
+    }
+
+    private func ensureLoaded(_ webView: WKWebView) async throws {
         if isLoaded, Self.matchesOrigin(webView.url, expected: site.origin) { return }
         webView.load(URLRequest(url: site.origin))
         for _ in 0..<40 {
@@ -311,13 +326,21 @@ final class WebSessionProvider: NSObject, UsageProvider {
     // MARK: - Fetching
 
     func fetchSnapshot() async throws -> ProviderSnapshot {
+        try Task.checkCancellation()
         guard hasSignedIn else { throw UsageProviderError.needsAuth }
+        guard !isFetching else { throw UsageProviderError.timedOut }
         if site.reloadBeforeFetch {
             guard signInWindow == nil else { throw UsageProviderError.timedOut }
             isLoaded = false
         }
-        try await ensureLoaded()
-        guard let webView else { throw UsageProviderError.needsAuth }
+        isFetching = true
+        let webView = makeWebViewIfNeeded()
+        defer {
+            isFetching = false
+            releaseWebViewIfIdle(webView)
+        }
+        try await ensureLoaded(webView)
+        try Task.checkCancellation()
 
         // `callAsyncJavaScript`, not `evaluateJavaScript`. The latter returns
         // whatever the last expression evaluates to and never awaits it, so an
@@ -329,9 +352,11 @@ final class WebSessionProvider: NSObject, UsageProvider {
                 site.script, arguments: [:], in: nil, contentWorld: .page
             )
         } catch {
+            try Task.checkCancellation()
             Log.usage.error("\(self.site.id, privacy: .public) fetch script failed: \(error.localizedDescription, privacy: .public)")
             throw UsageProviderError.badResponse(status: 0)
         }
+        try Task.checkCancellation()
 
         guard let text = result as? String,
               let data = text.data(using: .utf8),
@@ -392,6 +417,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
     /// part of a refresh.
     func recordCalls(on url: URL, settleFor seconds: Double = 8) async -> [String] {
         let webView = makeWebViewIfNeeded()
+        defer { releaseWebViewIfIdle(webView) }
         webView.load(URLRequest(url: url))
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         isLoaded = false   // the page moved; the next refresh reloads its own
@@ -628,10 +654,14 @@ extension WebSessionProvider: NSWindowDelegate {
         // final state and publish it so Settings does not need a relaunch.
         guard let pendingGate,
               let probe = site.authProbeScript,
-              let pendingWebView else { return }
+              let pendingWebView else {
+            releaseWebViewIfIdle(pendingWebView)
+            return
+        }
         let expectedOrigin = site.origin
         signInProbeTask = Task { [weak self, weak pendingWebView] in
             guard let self, let pendingWebView else { return }
+            defer { self.releaseWebViewIfIdle(pendingWebView) }
             guard !pendingWebView.isLoading,
                   Self.matchesOrigin(pendingWebView.url, expected: expectedOrigin),
                   let result = try? await pendingWebView.callAsyncJavaScript(
