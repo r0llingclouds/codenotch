@@ -38,7 +38,7 @@ struct UsageHistoryRecord: Sendable {
             } else if let fraction = window.usedFraction {
                 kind = .quota; unit = "%"; value = fraction * 100
             } else if let remaining = window.remaining {
-                kind = .remaining; unit = snapshot.id == "google-flow" ? "credits" : "count"
+                kind = .remaining; unit = "count"
                 value = Double(remaining)
             } else if let used = window.used, window.usedText == nil {
                 kind = .count; unit = "count"; value = Double(used)

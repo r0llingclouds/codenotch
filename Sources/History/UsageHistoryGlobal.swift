@@ -22,7 +22,6 @@ enum UsageHistoryGlobal {
         case "codex": preferred = ["primary", "secondary"]
         case "kimi": preferred = ["monthly", "rolling"]
         case "glm": preferred = ["weekly", "session"]
-        case "cursor": preferred = ["auto", "on_demand"]
         case "gemini-chat", "notebooklm": preferred = ["weekly", "current"]
         default: preferred = []
         }

@@ -24,8 +24,8 @@ final class UsageCollectorRuntime {
         let claude = claudeProfiles.map { ClaudeOAuthProvider(profile: $0) }
         let miniMax = WebSessionProvider(site: Sites.minimax(region: preferences.minimaxRegion))
         let web = [WebSessionProvider(site: Sites.deepSeek), WebSessionProvider(site: Sites.qianwen)]
-            + GoogleUsagePages.sites.map { WebSessionProvider(site: $0) }
-        let providers: [UsageProvider] = claude + [CursorLocalProvider()]
+            + GoogleUsagePages.sites.filter { $0.id != "google-flow" }.map { WebSessionProvider(site: $0) }
+        let providers: [UsageProvider] = claude
             + codexProfiles.map { CodexLocalProvider(profile: $0) }
             + antigravityProfiles.map { AntigravityProvider(profile: $0) }
             + [GLMProvider(), MiniMaxProvider(web: miniMax), GrokLocalProvider(), DevinLocalProvider(),
@@ -107,7 +107,7 @@ final class UsageCollectorRuntime {
         }.store(in: &subscriptions)
 
         var monitors: [String: any AgentActivityMonitor] = [
-            "cursor": CursorActivityMonitor(), "grok": GrokActivityMonitor(),
+            "grok": GrokActivityMonitor(),
             "gemini-api": GeminiAPIActivityMonitor(), "kimi": KimiActivityMonitor()
         ]
         for profile in codexProfiles { monitors[profile.id] = CodexActivityMonitor(profile: profile) }

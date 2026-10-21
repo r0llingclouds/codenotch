@@ -103,7 +103,10 @@ final class CollectorDashboardClient {
 
     func load() {
         guard let state = CollectorState.read() else { return }
-        model.snapshot = state.snapshot
+        // An older collector can still publish providers this build no longer shows.
+        var snapshot = state.snapshot
+        snapshot.providers.removeAll { reading in !UsageWidgetSnapshot.catalogue.contains { $0.id == reading.id } }
+        model.snapshot = snapshot
         model.plans = state.plans
         model.refreshing = service.enabled && Date().timeIntervalSince(state.snapshot.generatedAt) < 120 ? state.refreshing : []
         model.history.recordingError = state.historyError

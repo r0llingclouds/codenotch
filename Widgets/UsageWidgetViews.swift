@@ -21,7 +21,6 @@ private struct ProviderStyle {
     var color: Color {
         switch id {
         case "codex": return Color(red: 0.44, green: 0.86, blue: 0.72)
-        case "cursor": return Color(red: 0.79, green: 0.84, blue: 0.94)
         case "claude": return Color(red: 1, green: 0.64, blue: 0.44)
         case "kimi": return Color(red: 0.77, green: 0.65, blue: 1)
         case "glm": return Color(red: 0.46, green: 0.78, blue: 0.98)
@@ -35,7 +34,6 @@ private struct ProviderStyle {
         switch id {
         case "codex": return GlyphOutline.openai
         case "claude": return GlyphOutline.claude
-        case "cursor": return GlyphOutline.cursor
         case "kimi": return GlyphOutline.kimi
         case "glm": return GlyphOutline.glm
         case "gemini-chat": return GlyphOutline.gemini
@@ -68,7 +66,7 @@ private struct ProviderMark: View {
             } else if !style.outline.isEmpty {
                 WidgetLogoShape(outline: style.outline).fill(style: FillStyle(eoFill: true))
             } else {
-                Image(systemName: id == "notebooklm" ? "book.closed.fill" : id == "google-flow" ? "play.rectangle.fill" : "water.waves")
+                Image(systemName: id == "notebooklm" ? "book.closed.fill" : "water.waves")
                     .resizable().scaledToFit()
             }
         }
@@ -295,21 +293,22 @@ struct UsageOverview: View {
     let date: Date
     var googleOnly = false
 
+    private var columns: Int { googleOnly ? 2 : 3 }
+
     private func columnSpan(for reading: WidgetProviderReading) -> Int {
         !googleOnly && reading.id == "claude" ? 2 : 1
     }
 
     private var cardRows: [[WidgetProviderReading]] {
         let readings = snapshot.providers.filter {
-            googleOnly ? ["gemini-chat", "notebooklm", "google-flow"].contains($0.id)
-                       : $0.id != "google-flow"
+            !googleOnly || ["gemini-chat", "notebooklm"].contains($0.id)
         }
         var rows: [[WidgetProviderReading]] = []
         var row: [WidgetProviderReading] = []
         var columnsUsed = 0
         for reading in readings {
             let span = columnSpan(for: reading)
-            if columnsUsed + span > 3 {
+            if columnsUsed + span > columns {
                 rows.append(row)
                 row = []
                 columnsUsed = 0
@@ -331,7 +330,7 @@ struct UsageOverview: View {
                 let gap: CGFloat = 7
                 let rowCount = max(1, rows.count)
                 let height = max(0, (geometry.size.height - CGFloat(rowCount - 1) * gap) / CGFloat(rowCount))
-                let columnWidth = max(0, (geometry.size.width - 2 * gap) / 3)
+                let columnWidth = max(0, (geometry.size.width - CGFloat(columns - 1) * gap) / CGFloat(columns))
                 VStack(spacing: gap) {
                     ForEach(rows.indices, id: \.self) { row in
                         HStack(spacing: gap) {
@@ -456,7 +455,7 @@ struct SingleProviderView: View {
                 } else {
                     Spacer(minLength: 0)
                     CreditAmount(meter: meter, color: color, large: true)
-                    Text(reading.id == "google-flow" ? L10n.t("credits available") : L10n.t("available balance"))
+                    Text(L10n.t("available balance"))
                         .font(.system(size: 10, weight: .medium)).foregroundStyle(widgetMuted)
                     Spacer(minLength: 0)
                 }

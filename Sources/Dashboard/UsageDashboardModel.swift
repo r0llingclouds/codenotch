@@ -77,13 +77,11 @@ enum DashboardCopy {
         switch id {
         case "codex": return L10n.t("Codex usage on your ChatGPT plan. ChatGPT chat has separate limits.")
         case "claude": return L10n.t("Session and weekly limits reported by Claude.")
-        case "cursor": return L10n.t("Cursor's Auto and API allowances are tracked separately.")
         case "kimi": return L10n.t("Kimi Code session and monthly allowances.")
         case "glm": return L10n.t("Usage on your Z.ai GLM Coding Plan.")
         case "deepseek": return L10n.t("Your remaining DeepSeek API balance, in the account currency.")
         case "gemini-chat": return L10n.t("Limits reported by Gemini chat for your signed-in Google account.")
-        case "notebooklm": return L10n.t("Limits reported by NotebookLM for your signed-in Google account.")
-        default: return L10n.t("AI credits reported by Flow. Credits are separate from chat usage limits.")
+        default: return L10n.t("Limits reported by NotebookLM for your signed-in Google account.")
         }
     }
 }

@@ -8,8 +8,8 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 > **Personal usage dashboard:** a native macOS app with desktop and Notification
-> Center widgets for Codex, Claude, Cursor, Kimi, GLM, DeepSeek, Gemini chat,
-> NotebookLM and Flow.
+> Center widgets for Codex, Claude, Kimi, GLM, DeepSeek, Gemini chat and
+> NotebookLM.
 > See [setup, sign-in and current limitations](docs/personal-widgets.md).
 > Build this checkout for the widgets; upstream downloads below do not include them.
 

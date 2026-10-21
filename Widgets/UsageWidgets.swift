@@ -3,14 +3,13 @@ import SwiftUI
 import WidgetKit
 
 enum UsageProviderChoice: String, AppEnum {
-    case codex, claude, cursor, kimi, glm, deepseek
+    case codex, claude, kimi, glm, deepseek
     case gemini = "gemini-chat"
     case notebooklm
-    case flow = "google-flow"
     static var typeDisplayRepresentation: TypeDisplayRepresentation = "Provider"
     static var caseDisplayRepresentations: [Self: DisplayRepresentation] = [
-        .codex: "Codex", .claude: "Claude", .cursor: "Cursor", .kimi: "Kimi", .glm: "GLM",
-        .deepseek: "DeepSeek", .gemini: "Gemini chat", .notebooklm: "NotebookLM", .flow: "Google Flow"
+        .codex: "Codex", .claude: "Claude", .kimi: "Kimi", .glm: "GLM",
+        .deepseek: "DeepSeek", .gemini: "Gemini chat", .notebooklm: "NotebookLM"
     ]
 }
 
@@ -114,7 +113,7 @@ struct GoogleUsageWidget: Widget {
         }
             .contentMarginsDisabled()
             .configurationDisplayName("Google AI Pro")
-            .description("Gemini chat, NotebookLM and Flow as separate allowances.")
+            .description("Gemini chat and NotebookLM as separate allowances.")
             .supportedFamilies([.systemMedium])
     }
 }

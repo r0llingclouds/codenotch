@@ -35,7 +35,7 @@ selection (including Claude Fable), a reading timeline, daily observed
 consumption and an activity calendar. The global view selects one labeled
 quota per service and counts services with observed activity; it never sums
 overlapping quotas or combines percentages, money and credits. DeepSeek remains a money
-balance; Flow remains credits. Export the selected series and period as CSV.
+balance. Export the selected series and period as CSV.
 
 Claude's provider history displays all its quota charts together, with Fable
 first, followed by session and all-model weekly usage. Each column has its own
@@ -63,15 +63,15 @@ Calendar days follow the Mac's timezone, including daylight-saving changes.
 
 ## Widgets
 
-- **All AI usage** (large): Codex, Claude, Cursor, Kimi, GLM, DeepSeek, Gemini chat
+- **All AI usage** (large): Codex, Claude, Kimi, GLM, DeepSeek, Gemini chat
   and NotebookLM. Claude spans two columns with Fable, session and weekly usage
-  side by side. Flow remains available in the app and the other widget types.
+  side by side.
 - **Provider usage** (small or medium): choose one provider in Edit Widget.
-- **Google AI Pro** (medium): three separate meters for Gemini chat, NotebookLM
-  and Flow. Antigravity and Gemini API quotas do not represent these products.
+- **Google AI Pro** (medium): two separate meters for Gemini chat and
+  NotebookLM. Antigravity and Gemini API quotas do not represent these products.
 
 The overview uses a three-column grid: Codex beside a double-width Claude card,
-then Cursor / Kimi / GLM and DeepSeek / Gemini / NotebookLM.
+then Kimi / GLM / DeepSeek and Gemini / NotebookLM.
 Its compact header shows only the title; the branding and aggregate readiness
 counter are omitted so the usage cards have more vertical space.
 The widget design uses a dark blue background, provider marks, compact colored
@@ -139,10 +139,9 @@ change its provider.
 
 ## Connecting providers
 
-Codex, Claude and Cursor use upstream's local credential discovery. Cursor
-reads the account signed into the editor and shows its reported Auto, API and
-on-demand allowances. The overview displays the first two meters; the medium
-provider widget can show three. The OpenAI meter
+Codex and Claude use upstream's local credential discovery. Cursor is not
+shown in the widgets or the dashboard, and the background collector does not
+read it. The OpenAI meter
 measures **Codex usage on your ChatGPT plan**, not ChatGPT web chat activity.
 Kimi reads the managed Kimi Code login, including the current global `.ai`
 region and environment-specific credential file. Its current 5h and monthly
@@ -161,8 +160,9 @@ in-app Platform login, which supports balance and API-key/model breakdowns.
 
 For each Google provider, use its **Sign in** action in Codenotch Accounts.
 Complete Google sign-in in the displayed window, then close that window.
-Gemini opens its `/usage` page; NotebookLM opens Settings → Usage; Flow opens `https://flow.google.com/` and reads
-Account details → Google Flow credits. English and Spanish quota labels are supported.
+Gemini opens its `/usage` page; NotebookLM opens Settings → Usage. Flow is not
+shown in the widgets or the dashboard, and the background collector does not
+read it. English and Spanish quota labels are supported.
 Each Google product has its own persistent WebKit store, so disconnecting one
 does not erase another product's browser session. No Safari/Chrome cookies are
 read or copied. Google can refuse embedded-browser sign-in; this condition
@@ -170,8 +170,7 @@ requires an alternative integration, and must not be displayed as zero usage.
 
 Google integrations read the products' rendered quota panels, not a public
 usage API. Their selectors and account sign-in must be verified on real pages.
-Unknown, changed or ambiguous page layouts remain unavailable. Flow shows a
-credit balance without inventing a monthly ceiling or reset date. Gemini and
+Unknown, changed or ambiguous page layouts remain unavailable. Gemini and
 NotebookLM retain the reset wording reported by Google rather than guessing
 dates from a localized clock string.
 

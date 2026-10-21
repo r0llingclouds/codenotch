@@ -41,10 +41,8 @@ final class UsageHistoryTests: XCTestCase {
         XCTAssertEqual(record.series.unit, "USD")
         XCTAssertEqual(record.point.value, 49.99)
         let credits = LimitWindow(id: "credits", label: "Credits", remaining: 1050)
-        let flow = try XCTUnwrap(UsageHistoryRecord.readings(from: snapshot([credits], id: "google-flow"), at: day).first)
-        XCTAssertEqual(flow.series.kind, .remaining)
-        XCTAssertEqual(flow.series.unit, "credits")
-        XCTAssertEqual(flow.point.value, 1050)
+        XCTAssertTrue(UsageHistoryRecord.readings(from: snapshot([credits], id: "google-flow"), at: day).isEmpty,
+                      "Flow is no longer shown, so it is not recorded")
     }
 
     func testModelLabelAndCurrencyChangesCannotMergeUnrelatedSeries() {

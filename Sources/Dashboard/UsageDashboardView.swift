@@ -362,7 +362,7 @@ struct DashboardBrand: View {
             if let glyph {
                 ProviderGlyphView(glyph: glyph, size: size)
             } else {
-                Image(systemName: id == "notebooklm" ? "book.closed" : "play.rectangle.fill")
+                Image(systemName: "book.closed")
                     .font(.system(size: size * 0.85)).frame(width: size, height: size)
             }
         }.foregroundStyle(Self.color(id)).accessibilityHidden(true)
@@ -372,7 +372,6 @@ struct DashboardBrand: View {
         switch id {
         case "codex": return .openai
         case "claude": return .claude
-        case "cursor": return .cursor
         case "kimi": return .kimi
         case "glm": return .glm
         case "deepseek": return .deepseek
@@ -386,7 +385,6 @@ struct DashboardBrand: View {
         case "codex": return L10n.t("ChatGPT · Codex")
         case "deepseek": return L10n.t("API balance")
         case "gemini-chat", "notebooklm": return L10n.t("Google AI")
-        case "google-flow": return L10n.t("AI credits")
         default: return L10n.t("Coding plan")
         }
     }
@@ -395,7 +393,6 @@ struct DashboardBrand: View {
         switch id {
         case "codex": return Color(red: 0.44, green: 0.86, blue: 0.72)
         case "claude": return Color(red: 1, green: 0.64, blue: 0.44)
-        case "cursor": return Color(red: 0.79, green: 0.84, blue: 0.94)
         case "kimi": return Color(red: 0.77, green: 0.65, blue: 1)
         case "glm": return Color(red: 0.46, green: 0.78, blue: 0.98)
         case "deepseek": return Color(red: 0.52, green: 0.65, blue: 1)
