@@ -132,6 +132,13 @@ separate development bundle identifiers. Build products are not registered with
 Launch Services automatically, so building/tests cannot redirect the installed
 background agent or desktop widget to a temporary executable.
 
+Preserve the installed app's signing identity when replacing a local build:
+account access and the background service can depend on that identity. After
+replacement, refresh Launch Services for both `/Applications/Codenotch.app`
+and its embedded `Contents/Library/LoginItems/CodenotchCollector.app` before
+starting the service, and register the installed widget extension. Stale
+signing metadata can make SMAppService reject a correctly signed collector.
+
 Open Codenotch once. In macOS, right-click the desktop, choose **Edit Widgets**,
 search **Codenotch**, then add the desired widget. The same widgets work in
 Notification Center. Right-click Provider usage and choose **Edit Widget** to
@@ -177,6 +184,10 @@ dates from a localized clock string.
 ## Freshness and privacy
 
 The collector refreshes at upstream's normal cadence (five minutes while idle).
+Its launch agent uses normal application priority because the dashboard and
+widgets depend on timely local responses, including while other apps compile.
+The loopback snapshot bridge serves its last published reading on a separate
+queue so provider work on the main actor cannot consume the widget's timeout.
 WidgetKit controls display refresh scheduling, so the widget is not a second
 by second monitor. It includes measurement age, marks readings stale after
 15 minutes, and never assumes that a quota reset has occurred merely because

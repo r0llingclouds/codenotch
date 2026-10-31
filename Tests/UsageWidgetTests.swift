@@ -68,6 +68,54 @@ final class GoogleUsagePagesTests: XCTestCase {
 
 @MainActor
 final class UsageWidgetTests: XCTestCase {
+    func testBridgeAnswersWhileMainActorIsBlocked() async throws {
+        let publisher = WidgetSnapshotPublisher(port: 0, reloadTimelines: {})
+        defer { publisher.stop() }
+        var snapshot = UsageWidgetSnapshot.empty
+        snapshot.generatedAt = Date()
+        publisher.publish(snapshot)
+        let expected = snapshot
+        for _ in 0..<100 where publisher.bridgePort == nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let port = try XCTUnwrap(publisher.bridgePort)
+        let answered = DispatchSemaphore(value: 0)
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/widget-snapshot")!)
+        request.timeoutInterval = 3
+        // Completion runs off the main actor, just as the separate widget
+        // process does. A main-queue bridge cannot answer until this wait ends.
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if error == nil, (response as? HTTPURLResponse)?.statusCode == 200,
+               let data, UsageWidgetStorage.decode(data) == expected {
+                answered.signal()
+            }
+        }
+        task.resume()
+        defer { task.cancel() }
+        XCTAssertEqual(answered.wait(timeout: .now() + 4), .success)
+    }
+
+    func testBridgeServesLatestPublishedReading() async throws {
+        let publisher = WidgetSnapshotPublisher(port: 0, reloadTimelines: {})
+        defer { publisher.stop() }
+        publisher.publish(.empty)
+        for _ in 0..<100 where publisher.bridgePort == nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let port = try XCTUnwrap(publisher.bridgePort)
+        let url = URL(string: "http://127.0.0.1:\(port)/widget-snapshot")!
+        let (initial, _) = try await URLSession.shared.data(from: url)
+        XCTAssertEqual(UsageWidgetStorage.decode(initial), .empty)
+        let source = ProviderSnapshot(id: "codex", displayName: "Codex", glyph: .openai,
+            fidelity: .official, status: .ok,
+            windows: [LimitWindow(id: "weekly", label: "Week", usedFraction: 0.65)])
+        let snapshot = WidgetSnapshotPublisher.makeSnapshot([source], disconnected: [], dates: ["codex": Date()])
+        publisher.publish(snapshot)
+        let (updated, response) = try await URLSession.shared.data(from: url)
+        XCTAssertEqual(UsageWidgetStorage.decode(updated), snapshot)
+        XCTAssertEqual((response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Cache-Control"), "no-store")
+    }
+
     func testFableLeadsEveryWidgetSizeWithoutDroppingOtherQuotas() throws {
         let windows = [LimitWindow(id: "session", label: "Current session", usedFraction: 0.08),
                        LimitWindow(id: "weekly_all", label: "All models", usedFraction: 0.18),
