@@ -177,6 +177,10 @@ dates from a localized clock string.
 ## Freshness and privacy
 
 The collector refreshes at upstream's normal cadence (five minutes while idle).
+Its launch agent uses normal application priority because the dashboard and
+widgets depend on timely local responses, including while other apps compile.
+The loopback snapshot bridge serves its last published reading on a separate
+queue so provider work on the main actor cannot consume the widget's timeout.
 WidgetKit controls display refresh scheduling, so the widget is not a second
 by second monitor. It includes measurement age, marks readings stale after
 15 minutes, and never assumes that a quota reset has occurred merely because

@@ -6,6 +6,8 @@
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
     <key>ThrottleInterval</key><integer>30</integer>
-    <key>ProcessType</key><string>Background</string>
+    <!-- The dashboard and WidgetKit wait for this agent's local responses.
+         Background priority can starve even those responses under CPU load. -->
+    <key>ProcessType</key><string>Interactive</string>
     <key>LimitLoadToSessionType</key><string>Aqua</string>
 </dict></plist>
