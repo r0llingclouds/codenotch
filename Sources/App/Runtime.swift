@@ -11,6 +11,8 @@ import Foundation
 /// them up at once, over whatever was being worked on, for the half minute the
 /// suite took.
 enum Runtime {
+    static let isCollector = Bundle.main.object(forInfoDictionaryKey: "CodenotchCollector") as? Bool == true
+    static let isPersonal = Bundle.main.object(forInfoDictionaryKey: "CodenotchPersonalFork") as? Bool == true
     static let isUnderTest: Bool =
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             || NSClassFromString("XCTestCase") != nil

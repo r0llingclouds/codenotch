@@ -223,7 +223,7 @@ final class ClaudeKeychain: @unchecked Sendable {
     /// installed app, so its real answer would decide what the tests read.
     convenience init(profile: ClaudeProfile) {
         self.init(services: profile.keychainServices,
-                  refusals: Runtime.isUnderTest ? nil : .standard)
+                  refusals: Runtime.isUnderTest ? nil : .codenotch)
     }
 
     /// The person said no to this login and has not asked again. While true,

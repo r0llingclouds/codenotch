@@ -110,6 +110,9 @@ final class UsageStore: ObservableObject {
 
     private let archive: UsageArchive
     private var lastGood: [String: (snapshot: ProviderSnapshot, fetchedAt: Date)] = [:]
+    var widgetMeasurementDates: [String: Date] { lastGood.mapValues(\.fetchedAt) }
+    var onHistoryReading: ((ProviderSnapshot, Date) -> Void)?
+
     private var timer: Timer?
     private var localTimer: Timer?
     private var fetchTasks: [String: Task<Void, Never>] = [:]
@@ -626,8 +629,10 @@ final class UsageStore: ObservableObject {
             // Model residency becomes untrue as soon as a server stops. It must
             // never use quota's last-good cache or survive an app relaunch.
             if provider.kind == .usage {
-                lastGood[provider.id] = (fresh, Date())
+                let measuredAt = Date()
+                lastGood[provider.id] = (fresh, measuredAt)
                 archive.save(lastGood)
+                onHistoryReading?(fresh, measuredAt)
             }
             refusedAccess.remove(provider.id)
             // A reading that actually came back is proof the credential works,

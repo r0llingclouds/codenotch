@@ -499,7 +499,7 @@ final class Preferences: ObservableObject {
     /// `@Published` state is main-actor-isolated where `UserDefaults` is
     /// thread-safe — so the provider reads the store, not the object.
     nonisolated static func storedGeminiAPIMonthlyTokenBudget(
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .codenotch
     ) -> Int? {
         guard let budget = defaults.object(forKey: Keys.geminiAPIMonthlyTokenBudget) as? Int,
               budget > 0
@@ -508,7 +508,7 @@ final class Preferences: ObservableObject {
     }
     
     nonisolated static func storedAntigravityHeadlineLimit(
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .codenotch
     ) -> AntigravityHeadlineLimit {
         guard let value = defaults.string(forKey: Keys.antigravityHeadlineLimit),
               let limit = AntigravityHeadlineLimit(rawValue: value)
@@ -517,7 +517,7 @@ final class Preferences: ObservableObject {
     }
 
     nonisolated static func storedAntigravityHeadlineModel(
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .codenotch
     ) -> AntigravityHeadlineModel {
         guard let value = defaults.string(forKey: Keys.antigravityHeadlineModel),
               let model = AntigravityHeadlineModel(rawValue: value)
@@ -534,7 +534,7 @@ final class Preferences: ObservableObject {
     /// means on: a first launch should show them. `bool(forKey:)` cannot stand
     /// in for that default — it answers false for a key that was never written.
     nonisolated static func storedShowCodexExtraLimits(
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .codenotch
     ) -> Bool {
         defaults.object(forKey: Keys.showCodexExtraLimits) as? Bool ?? true
     }
@@ -545,7 +545,7 @@ final class Preferences: ObservableObject {
     /// `@Published` state is main-actor-isolated where `UserDefaults` is
     /// thread-safe — so the provider reads the store, not the object.
     nonisolated static func storedMinimaxRegion(
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .codenotch
     ) -> MiniMaxRegion {
         guard let value = defaults.string(forKey: Keys.minimaxRegion),
               let region = MiniMaxRegion(rawValue: value)
@@ -570,7 +570,7 @@ final class Preferences: ObservableObject {
     /// looks like a reset.
     private static let previousDomain = "com.vinz.usagenotch"
 
-    static func migrateFromPreviousName(into defaults: UserDefaults = .standard,
+    static func migrateFromPreviousName(into defaults: UserDefaults = .codenotch,
                                         from domain: String = previousDomain) {
         // The emptiness test has to be about the object being written to, not
         // about `Bundle.main` — under test those are different domains, and the
@@ -585,7 +585,7 @@ final class Preferences: ObservableObject {
         Log.usage.info("migrated \(old.count) settings from the previous app name")
     }
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .codenotch) {
         self.defaults = defaults
         self.isFirstLaunch = !defaults.bool(forKey: Keys.hasLaunched)
         defaults.set(true, forKey: Keys.hasLaunched)
@@ -926,16 +926,15 @@ final class Preferences: ObservableObject {
     /// update, and wiping data on every Sparkle update would be catastrophic.
     /// It has to be something the user asks for.
     static func eraseAllData() {
-        let bundleID = Bundle.main.bundleIdentifier ?? "com.vinz.codenotch"
-        UserDefaults.standard.removePersistentDomain(forName: bundleID)
-        UserDefaults.standard.synchronize()
+        let bundleID = Runtime.isCollector ? "com.r0llingclouds.codenotch" : (Bundle.main.bundleIdentifier ?? "com.vinz.codenotch")
+        UserDefaults.codenotch.removePersistentDomain(forName: bundleID)
+        UserDefaults.codenotch.synchronize()
 
         let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
-        for relative in ["Caches/\(bundleID)",
-                         "WebKit/\(bundleID)",
-                         "HTTPStorages/\(bundleID)",
-                         "HTTPStorages/\(bundleID).binarycookies",
-                         "Saved Application State/\(bundleID).savedState"] {
+        let storageIDs = Runtime.isCollector ? [bundleID, "com.r0llingclouds.codenotch.collector"] : [bundleID]
+        let paths = storageIDs.flatMap { id in ["Caches/\(id)", "WebKit/\(id)", "HTTPStorages/\(id)",
+            "HTTPStorages/\(id).binarycookies", "Saved Application State/\(id).savedState"] }
+        for relative in paths {
             if let url = library?.appendingPathComponent(relative) {
                 try? FileManager.default.removeItem(at: url)
             }

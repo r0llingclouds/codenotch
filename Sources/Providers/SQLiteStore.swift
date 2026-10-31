@@ -9,25 +9,42 @@ import SQLite3
 /// - `immutable=1` tells SQLite to ignore the write-ahead log entirely, so a
 ///   running app's most recent writes are invisible. That is how a live agent
 ///   looks idle and a rotated token looks current.
-/// - `mode=ro` sees the log, but needs the `-shm` sidecar to do it — and that
-///   file exists only *while the owning app is running*. Once it has quit and
-///   checkpointed, a read-only open fails outright with "unable to open
-///   database file".
+/// - `mode=ro` sees the log, but may need to create the `-wal` and `-shm`
+///   sidecars after the owning app has quit. Without write access to that
+///   directory, opening can succeed and the first actual read fails instead.
 ///
-/// So: `mode=ro` first, `immutable=1` second. The fallback is only ever reached
-/// when there is no write-ahead log left to miss, which is exactly when ignoring
-/// it costs nothing.
+/// Validate an actual page read before returning a connection. Only use the
+/// immutable fallback when there is no journal to ignore; an inaccessible live
+/// WAL must never silently become an older credential from the main file.
 enum SQLiteStore {
     static func open(_ url: URL) -> OpaquePointer? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        func hasJournal() -> Bool {
+            ["-wal", "-journal"].contains {
+                FileManager.default.fileExists(atPath: url.path + $0)
+            }
+        }
         for query in ["mode=ro", "immutable=1"] {
+            let immutable = query == "immutable=1"
+            if immutable && hasJournal() { return nil }
             var db: OpaquePointer?
-            if sqlite3_open_v2("file:\(url.path)?\(query)", &db,
-                               SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK,
-               let db {
+            let opened = sqlite3_open_v2("file:\(url.path)?\(query)", &db,
+                                        SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil)
+            // SELECT 1 is insufficient: it never reads the database pages.
+            let readable = opened == SQLITE_OK
+                ? sqlite3_exec(db, "PRAGMA schema_version", nil, nil, nil)
+                : opened
+            if readable == SQLITE_OK, let db {
+                // The owning app may have restarted while we opened the file.
+                if immutable && hasJournal() {
+                    sqlite3_close(db)
+                    return nil
+                }
                 return db
             }
             sqlite3_close(db)
+            let errorCode = readable & 0xff
+            guard errorCode == SQLITE_CANTOPEN || errorCode == SQLITE_READONLY else { return nil }
         }
         return nil
     }

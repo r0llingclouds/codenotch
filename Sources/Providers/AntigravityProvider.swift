@@ -85,7 +85,7 @@ actor AntigravityProvider: UsageProvider {
             )
         }
         
-        if profile.slug == nil && UserDefaults.standard.bool(forKey: "AntigravityEverBridged") {
+        if profile.slug == nil && UserDefaults.codenotch.bool(forKey: "AntigravityEverBridged") {
             return ProviderAccount(
                 label: L10n.t("Local Session"),
                 plan: L10n.t("Active"),
@@ -111,7 +111,7 @@ actor AntigravityProvider: UsageProvider {
         if profile.slug == nil {
             if let windows = await localQuota(), !windows.isEmpty {
                 everBridged = true
-                UserDefaults.standard.set(true, forKey: "AntigravityEverBridged")
+                UserDefaults.codenotch.set(true, forKey: "AntigravityEverBridged")
                 
                 return ProviderSnapshot(id: id, displayName: displayName, glyph: glyph,
                                         fidelity: .official, status: .ok, windows: windows,
