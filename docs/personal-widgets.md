@@ -4,9 +4,53 @@ This fork adds a native SwiftUI dashboard and WidgetKit widgets to Codenotch. An
 provider usage; the widget extension only receives normalized quota windows,
 balances, status and measurement dates. Upstream Codenotch remains MIT licensed.
 
+<!-- session-cleanup:context:start -->
+## Current verified baseline
+
+On 2026-10-31, [PR #3](https://github.com/r0llingclouds/codenotch/pull/3)
+merged the widget refresh fix into `feature/native-usage-widgets` at `4442dde`.
+[PR #1](https://github.com/r0llingclouds/codenotch/pull/1) remains open from that
+branch to `main`; the personal dashboard and widgets have not merged into `main`.
+The current catalogue contains seven services: Codex, Claude, Kimi, GLM,
+DeepSeek, Gemini chat and NotebookLM. Cursor and Flow are excluded.
+
+The collector's `Background` launchd process type could starve it under heavy
+CPU load, leaving loopback requests timing out even after a restart. It now
+uses `Interactive`. The snapshot bridge serves a locked, normalized payload
+on a dedicated user-initiated serial queue, without waiting for the main actor.
+Regression tests exercise a real loopback request while the main actor is
+blocked, plus replacement of the published snapshot and no-store responses.
+
+Code revision `7efc1a9` passed the full local Debug suite: 1,783 tests executed,
+three skipped, zero failures. The universal Release build succeeded. The merged
+tree at `4442dde` is identical to `74f62c4`, which adds installation documentation
+to that tested code. No new GitHub Actions result was available for this revision;
+the [historical CI run at `a4d5069`](https://github.com/r0llingclouds/codenotch/actions/runs/35633571021)
+does not validate it.
+
+Release build 32 was installed at `/Applications/Codenotch.app`, retaining the
+previous Apple Development signing identity. Deep, strict signature verification
+passed. Launch Services registration of both the installed app and embedded
+collector resolved stale SMAppService signing metadata; changing only the
+certificate within the same team had failed its stored launch constraint.
+The registered job uses the installed helper and the Interactive process type.
+With the dashboard quit, launchd restarted the terminated collector and its
+snapshot bridge responded in 37.3 ms while six services had current readings.
+DeepSeek then required sign-in and email verification inside Codenotch; that
+completed and its real balance reading advanced. All seven providers reported
+ready in the final snapshot, with their own measurement dates. Provider backoff
+and WidgetKit scheduling still apply; this is not a simultaneous refresh claim.
+
+Continue from the integration branch, not the merged fix branch. The
+[Project](https://github.com/users/r0llingclouds/projects/11) is the task entrypoint;
+[History follow-ups #2](https://github.com/r0llingclouds/codenotch/issues/2) remain
+open in Backlog and were not implemented by this fix. Before taking that work,
+read its existing findings and reproduce the chosen item against the checkout.
+<!-- session-cleanup:context:end -->
+
 ## Native app
 
-Open Codenotch from Applications or Spotlight to see all nine services in one
+Open Codenotch from Applications or Spotlight to see all seven services in one
 resizable window. Select a card to open its details alongside the overview:
 every reported quota, balance, reset date and last measurement. Unavailable or
 stale readings stay explicitly marked. The app only names a plan when the
@@ -29,7 +73,7 @@ existing sessions; closing those settings hides its temporary Dock icon.
 
 The **History** tab records fresh successful readings from the existing store,
 without extra provider requests. It offers Today / 7 / 30 / 90 day ranges,
-an **All services** view with nine individual trend cards, an overlaid quota
+an **All services** view with seven individual trend cards, an overlaid quota
 chart and daily activity across services. Select a card or provider for quota
 selection (including Claude Fable), a reading timeline, daily observed
 consumption and an activity calendar. The global view selects one labeled
@@ -211,7 +255,10 @@ Successful compilation alone does not verify WidgetKit registration or Google
 sign-in. Verify gallery registration, rendered widgets, a real quota refresh,
 and each Google sign-in after installing.
 
-## Verified locally
+## Earlier local checks (historical)
+
+These checks describe earlier builds and their then-current provider catalogues.
+Use the revision-pinned baseline above for the current installation.
 
 On 2026-09-20, the Release app launched from `/Applications/Codenotch.app`;
 macOS registered the extension and the owner added **All AI usage** to the
