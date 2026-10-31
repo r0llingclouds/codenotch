@@ -132,6 +132,13 @@ separate development bundle identifiers. Build products are not registered with
 Launch Services automatically, so building/tests cannot redirect the installed
 background agent or desktop widget to a temporary executable.
 
+Preserve the installed app's signing identity when replacing a local build:
+account access and the background service can depend on that identity. After
+replacement, refresh Launch Services for both `/Applications/Codenotch.app`
+and its embedded `Contents/Library/LoginItems/CodenotchCollector.app` before
+starting the service, and register the installed widget extension. Stale
+signing metadata can make SMAppService reject a correctly signed collector.
+
 Open Codenotch once. In macOS, right-click the desktop, choose **Edit Widgets**,
 search **Codenotch**, then add the desired widget. The same widgets work in
 Notification Center. Right-click Provider usage and choose **Edit Widget** to
