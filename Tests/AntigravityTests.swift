@@ -1694,6 +1694,100 @@ final class AntigravitySourceOrderTests: XCTestCase {
             XCTFail("expected credentialExpired, got \(error)")
         }
     }
+
+    func testCLIFallbackReadsOfficialQuotaWhenBridgeUnavailable() async throws {
+        var calls = 0
+        var clock = Date(timeIntervalSince1970: 10_000)
+        let sample = """
+        Gemini Models\tWeekly Limit Remaining\t84%\t2026-11-28T11:24:27Z
+        Gemini Models\tFive Hour Limit Remaining\t45%\t2026-11-22T15:05:16Z
+        Claude and GPT models\tWeekly Limit Remaining\t100%\t2026-11-29T13:03:48Z
+        Claude and GPT models\tFive Hour Limit Remaining\t100%\t2026-11-22T18:03:48Z
+        Gemini 4 Argon\tGemini 4 Argon Weekly Limit\t100%\t2026-11-29T13:03:48Z
+        """
+        let cli = AntigravityUsageCLI(binary: URL(fileURLWithPath: "/usr/local/bin/agy")) {
+            calls += 1
+            return sample
+        }
+        let provider = AntigravityProvider(
+            session: GoogleStub.session(),
+            localQuota: { nil },
+            cli: cli,
+            cliRefreshInterval: 120,
+            now: { clock }
+        )
+
+        let first = try await provider.fetchSnapshot()
+        XCTAssertEqual(first.fidelity, .official)
+        XCTAssertEqual(first.windows.map(\.id), ["gemini-5h", "gemini-weekly", "3p-5h", "3p-weekly", "gemini-argon-weekly"])
+        XCTAssertEqual(first.windows[0].usedFraction ?? -1, 0.55, accuracy: 0.0001)
+        XCTAssertEqual(first.windows[1].usedFraction ?? -1, 0.16, accuracy: 0.0001)
+        XCTAssertEqual(first.headlineID, "gemini-5h")
+        XCTAssertEqual(first.weeklyID, "gemini-weekly")
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(GoogleStub.requestCount, 0)
+
+        // Cached within cliRefreshInterval
+        clock.addTimeInterval(60)
+        let second = try await provider.fetchSnapshot()
+        XCTAssertEqual(second.windows, first.windows)
+        XCTAssertEqual(calls, 1)
+
+        // Refreshed after cliRefreshInterval
+        clock.addTimeInterval(61)
+        _ = try await provider.fetchSnapshot()
+        XCTAssertEqual(calls, 2)
+    }
+}
+
+final class AntigravityUsageCLITests: XCTestCase {
+    func testParsesTabSeparatedLiveOutputInStandardOrder() throws {
+        let output = """
+        Gemini Models\tWeekly Limit Remaining\t87.42%\t2026-11-28T11:24:27Z
+        Gemini Models\tFive Hour Limit Remaining\t56.87%\t2026-11-22T15:05:16Z
+        Claude and GPT models\tWeekly Limit Remaining\t100%\t2026-11-29T13:03:48Z
+        Claude and GPT models\tFive Hour Limit Remaining\t100%\t2026-11-22T18:03:48Z
+        Gemini 4 Argon\tGemini 4 Argon Weekly Limit\t100%\t2026-11-29T13:03:48Z
+        """
+        let windows = try AntigravityUsageCLI.parse(output)
+        XCTAssertEqual(windows.map(\.id), ["gemini-5h", "gemini-weekly", "3p-5h", "3p-weekly", "gemini-argon-weekly"])
+        XCTAssertEqual(windows[0].usedFraction ?? -1, 0.4313, accuracy: 0.0001)
+        XCTAssertEqual(windows[0].duration, 5 * 3600)
+        XCTAssertEqual(windows[1].usedFraction ?? -1, 0.1258, accuracy: 0.0001)
+        XCTAssertEqual(windows[1].duration, 7 * 86400)
+        XCTAssertEqual(windows[4].group, "Gemini 4 Argon")
+        XCTAssertEqual(windows[4].usedFraction ?? -1, 0, accuracy: 0.0001)
+    }
+
+    func testParsesANSIWrappedLegacySpaceSeparatedOutput() throws {
+        let output = "\u{1B}[32mQuota:\u{1B}[0m\r\nGemini Models Weekly Limit Remaining 94% 2026-09-12T01:47:23Z\r\nGemini Models Five Hour Limit Remaining 78% 2026-09-10T06:12:31Z\r\n"
+        let windows = try AntigravityUsageCLI.parse(output)
+        XCTAssertEqual(windows.map(\.id), ["gemini-5h", "gemini-weekly"])
+        XCTAssertEqual(windows[0].usedFraction ?? -1, 0.22, accuracy: 0.0001)
+        XCTAssertEqual(windows[1].usedFraction ?? -1, 0.06, accuracy: 0.0001)
+    }
+
+    func testRejectsEmptyOrInvalidCLIOutput() {
+        for bad in ["", "authentication required", "Gemini Models\tWeekly Limit Remaining\t105%\t2026-11-28T11:24:27Z", "Gemini Models\tWeekly Limit Remaining\t50%\tnot-a-date"] {
+            XCTAssertThrowsError(try AntigravityUsageCLI.parse(bad), bad)
+        }
+    }
+
+    func testLocateFindsBinaryInLocalBin() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("agy-home-\(UUID().uuidString)")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("agy-root-\(UUID().uuidString)")
+        defer {
+            try? FileManager.default.removeItem(at: home)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let bin = home.appendingPathComponent(".local/bin/agy")
+        try FileManager.default.createDirectory(at: bin.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("#!/bin/sh\n".utf8).write(to: bin)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bin.path)
+
+        let found = AntigravityUsageCLI.locate(home: home, root: root, pathEnv: "")
+        XCTAssertEqual(found?.binary.standardizedFileURL, bin.standardizedFileURL)
+    }
 }
 
 /// Hands out canned bridge answers in order, so one test can watch Antigravity

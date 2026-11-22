@@ -319,7 +319,7 @@ private struct SettingsQuitRow: View {
                 Image(systemName: "power")
                     .font(.system(size: 12, weight: .regular))
                     .frame(width: 18)
-                Text(L10n.t("Quit Codenotch"))
+                Text(Runtime.isCollector ? L10n.t("Close account settings") : L10n.t("Quit Codenotch"))
                     .font(.system(size: 13, weight: .regular))
             }
             .foregroundStyle(isHovered ? Self.hoverRed : Color.white.opacity(0.55))
@@ -1212,7 +1212,9 @@ struct SettingsView: View {
             // No title on the group: the pane's own header above already
             // says "General", and repeating it here would say it twice.
             Section {
-                Toggle(L10n.t("Open Codenotch at login"), isOn: $preferences.launchAtLogin)
+                if !Runtime.isCollector {
+                    Toggle(L10n.t("Open Codenotch at login"), isOn: $preferences.launchAtLogin)
+                }
                 if let problem = preferences.launchAtLoginProblem {
                     Text(problem)
                         .font(.caption)

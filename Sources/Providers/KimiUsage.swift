@@ -35,6 +35,29 @@ enum KimiUsage {
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { throw UsageProviderError.badResponse(status: 0) }
 
+        // Kimi Code 2 uses explicit 5h/weekly/monthly ratios. Prefer them
+        // over legacy counters, which can describe a different allowance.
+        if let usages = root["usages"] as? [String: Any] {
+            let definitions: [(String, String, String, TimeInterval?)] = [
+                ("limit_5h", "rolling", L10n.t("5h limit"), 5 * 3600),
+                ("limit_7d", "weekly", L10n.t("Weekly limit"), 7 * 86400),
+                ("limit_month_total", "monthly", L10n.t("Monthly total"), nil),
+                ("limit_month_code", "monthly-code", L10n.t("Monthly Code"), nil)
+            ]
+            let windows = definitions.compactMap { key, id, label, duration -> LimitWindow? in
+                guard let entry = usages[key] as? [String: Any] else { return nil }
+                let ratio = (entry["used_ratio"] as? NSNumber)?.doubleValue
+                    ?? (entry["used_ratio"] as? String).flatMap(Double.init)
+                guard let ratio, ratio.isFinite, ratio >= 0 else { return nil }
+                return LimitWindow(id: id, label: label, usedFraction: ratio,
+                    resetsAt: (entry["reset_time"] as? String).flatMap(date(from:)), duration: duration)
+            }
+            guard !windows.isEmpty else {
+                throw UsageProviderError.nothingMetered(L10n.t("No Kimi Code usage limits on this account"))
+            }
+            return Read(windows: windows, plan: plan(from: root))
+        }
+
         var windows: [LimitWindow] = []
         if let summary = root["usage"] as? [String: Any],
            let window = row(id: "weekly", label: L10n.t("Weekly limit"),

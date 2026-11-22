@@ -1,0 +1,42 @@
+name: Personal widgets
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: personal-widgets-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    if: github.repository == 'r0llingclouds/codenotch'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install project generator
+        run: brew install xcodegen
+      - name: Run unit tests
+        run: make test-ci
+      - name: Build local app with native widgets
+        run: |
+          xcodebuild -project Codenotch.xcodeproj -scheme Codenotch \
+            -configuration Release -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath build/Personal CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= \
+            CODE_SIGN_STYLE=Automatic build
+          APP=build/Personal/Build/Products/Release/Codenotch.app
+          test -x "$APP/Contents/Library/LoginItems/CodenotchCollector.app/Contents/MacOS/CodenotchCollector"
+          plutil -lint "$APP/Contents/Library/LaunchAgents/com.r0llingclouds.codenotch.collector.plist"
+          codesign --verify --deep --strict "$APP"
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/Personal/Build/Products/Release/Codenotch.app build/Codenotch-Widgets.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Codenotch-Widgets
+          path: build/Codenotch-Widgets.zip
+          if-no-files-found: error

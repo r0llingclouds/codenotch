@@ -216,9 +216,10 @@ enum AntigravityQuotaParser {
 
     private static func groupRank(_ value: String?) -> Int {
         let normalized = self.normalized(value ?? "")
+        if normalized.contains("argon") { return 2 }
         if normalized.contains("gemini") { return 0 }
         if normalized.contains("claude") || normalized.contains("gpt") { return 1 }
-        return 2
+        return 3
     }
 
     private static func cadence(_ bucket: Bucket) -> Int {
@@ -233,8 +234,11 @@ enum AntigravityQuotaParser {
 
     private static func cadenceValue(_ raw: String?) -> String? {
         guard let raw else { return nil }
-        let value = self.normalized(raw)
+        var value = self.normalized(raw)
         guard !value.isEmpty else { return nil }
+        if value.hasSuffix(" remaining") {
+            value = String(value.dropLast(" remaining".count))
+        }
         return value.hasSuffix(" limit") ? String(value.dropLast(" limit".count)) : value
     }
 

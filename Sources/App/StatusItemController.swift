@@ -18,6 +18,7 @@ import AppKit
 final class StatusItemController: NSObject, NSMenuDelegate {
     private var item: NSStatusItem?
     private let onOpenSettings: () -> Void
+    var onOpenDashboard: (() -> Void)?
     /// Refetch one provider, leaving the others alone.
     var onRefreshProvider: ((String) -> Void)?
     /// Refetch every provider.
@@ -154,6 +155,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// Exposed for tests: what the menu says without needing a status item.
     func rebuild(menu: NSMenu, now: Date) {
         menu.removeAllItems()
+        if onOpenDashboard != nil {
+            menu.addItem(withTitle: L10n.t("Open AI Usage"), action: #selector(openDashboard), keyEquivalent: "1").target = self
+            menu.addItem(.separator())
+        }
         if snapshots.isEmpty {
             let empty = NSMenuItem(title: L10n.t("Waiting for the first reading…"), action: nil, keyEquivalent: "")
             empty.isEnabled = false
@@ -213,6 +218,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
     }
 
+    @objc private func openDashboard() { onOpenDashboard?() }
     @objc private func openSettings() { onOpenSettings() }
     @objc private func quit() { NSApp.terminate(nil) }
 

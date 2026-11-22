@@ -27,6 +27,7 @@ Third-party notices
 - Provider marks in codenotch/glyphs/ are from @lobehub/icons-static-svg (MIT,
   Copyright (c) LobeHub); see codenotch/glyphs/NOTICE.md. The marks remain the
   trademarks of Anthropic, OpenAI, Anysphere (Cursor) and Google respectively.
-- codenotch/icons/icon.ico and tray.png are derived from the upstream Codenotch
-  app icon by @vinzdg and are used here only for the upstream contribution;
-  their license follows the upstream repository.
+- codenotch/icons/tray.png is derived from the upstream Codenotch app icon by
+  @vinzdg and is used here only for the upstream contribution; its license
+  follows the upstream repository. icon.ico and tray-color.png are this fork's
+  own icon, drawn by Scripts/make_icon.py.

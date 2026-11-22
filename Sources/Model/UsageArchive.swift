@@ -29,7 +29,7 @@ struct UsageArchive {
     private let key = "lastGoodReadings"
     private let backoffKey = "backoffUntil"
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .codenotch) {
         self.defaults = defaults
     }
 

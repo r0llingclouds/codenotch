@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 
 /// The Z.ai key behind a GLM Coding Plan, borrowed from whichever tool holds
 /// it.
@@ -56,6 +57,7 @@ enum GLMCredentials {
              zcodeConfig: zcodeConfigURL,
              zcodeCredentials: zcodeCredentialsURL,
              openCodeAuth: openCodeAuthURL)
+            ?? openCodeDatabase(openCodeAuthURL.deletingLastPathComponent().appendingPathComponent("opencode.db"))
     }
 
     /// Every path is a parameter so a test can point each source at its own
@@ -172,6 +174,25 @@ enum GLMCredentials {
                     return Credential(token: key, baseURL: console(forProviderID: id), source: "OpenCode")
                 }
             }
+        }
+        return nil
+    }
+
+    /// Current OpenCode stores credentials in SQLite. Only the selected key
+    /// for a recognized provider is eligible; never guess among saved accounts.
+    static func openCodeDatabase(_ url: URL) -> Credential? {
+        guard let db = SQLiteStore.open(url) else { return nil }
+        defer { sqlite3_close(db) }
+        for id in openCodeProviderIDs {
+            let rows = SQLiteStore.rows(in: db,
+                sql: "SELECT value FROM credential WHERE integration_id = ? AND active = 1", bind: id)
+            guard rows.count == 1,
+                  let data = rows[0].data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  object["type"] as? String == "key",
+                  let key = string(object["key"]), !key.hasPrefix(encryptedMarker)
+            else { continue }
+            return Credential(token: key, baseURL: console(forProviderID: id), source: "OpenCode")
         }
         return nil
     }

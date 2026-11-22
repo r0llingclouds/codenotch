@@ -9,6 +9,8 @@ import SwiftUI
 @MainActor
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
+    var keepRegularPresence: () -> Bool = { false }
+    var isVisible: Bool { window?.isVisible == true || window?.isMiniaturized == true }
     /// Ends text editing when a click lands anywhere but a text field.
     private var clickAwayMonitor: Any?
     private let preferences: Preferences
@@ -148,7 +150,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        NSApp.setActivationPolicy(preferences.appPresence.activationPolicy)
+        NSApp.setActivationPolicy(Runtime.isCollector ? .accessory : (keepRegularPresence() ? .regular : preferences.appPresence.activationPolicy))
     }
 
     /// Sit the traffic lights in the middle of the panel's header band.
@@ -198,6 +200,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// window is open but behind something else should fetch it forward — the
     /// intent there is plainly "show me that", and closing it would be the one
     /// thing the click could not have meant.
+    func close() { window?.close() }
+
     func toggle() {
         if let window, window.isVisible, window.isKeyWindow {
             // `isReleasedWhenClosed` is false, so this hides it and keeps the
