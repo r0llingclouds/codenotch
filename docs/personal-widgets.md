@@ -11,8 +11,9 @@ On 2026-10-31, [PR #3](https://github.com/r0llingclouds/codenotch/pull/3)
 merged the widget refresh fix into `feature/native-usage-widgets` at `4442dde`.
 [PR #1](https://github.com/r0llingclouds/codenotch/pull/1) remains open from that
 branch to `main`; the personal dashboard and widgets have not merged into `main`.
-The current catalogue contains seven services: Codex, Claude, Kimi, GLM,
-DeepSeek, Gemini chat and NotebookLM. Cursor and Flow are excluded.
+The catalogue at that revision contained seven services: Codex, Claude, Kimi, GLM,
+DeepSeek, Gemini chat and NotebookLM. Antigravity was added afterwards in `a031d83`,
+which makes eight. Cursor and Flow are excluded.
 
 The collector's `Background` launchd process type could starve it under heavy
 CPU load, leaving loopback requests timing out even after a restart. It now
@@ -50,7 +51,7 @@ read its existing findings and reproduce the chosen item against the checkout.
 
 ## Native app
 
-Open Codenotch from Applications or Spotlight to see all seven services in one
+Open Codenotch from Applications or Spotlight to see all eight services in one
 resizable window. Select a card to open its details alongside the overview:
 every reported quota, balance, reset date and last measurement. Unavailable or
 stale readings stay explicitly marked. The app only names a plan when the
@@ -73,7 +74,7 @@ existing sessions; closing those settings hides its temporary Dock icon.
 
 The **History** tab records fresh successful readings from the existing store,
 without extra provider requests. It offers Today / 7 / 30 / 90 day ranges,
-an **All services** view with seven individual trend cards, an overlaid quota
+an **All services** view with eight individual trend cards, an overlaid quota
 chart and daily activity across services. Select a card or provider for quota
 selection (including Claude Fable), a reading timeline, daily observed
 consumption and an activity calendar. The global view selects one labeled
@@ -107,15 +108,17 @@ Calendar days follow the Mac's timezone, including daylight-saving changes.
 
 ## Widgets
 
-- **All AI usage** (large): Codex, Claude, Kimi, GLM, DeepSeek, Gemini chat
-  and NotebookLM. Claude spans two columns with Fable, session and weekly usage
+- **All AI usage** (large): Codex, Claude, Kimi, GLM, DeepSeek, Antigravity,
+  Gemini chat and NotebookLM. Claude spans two columns with Fable, session and weekly usage
   side by side.
 - **Provider usage** (small or medium): choose one provider in Edit Widget.
-- **Google AI Pro** (medium): two separate meters for Gemini chat and
-  NotebookLM. Antigravity and Gemini API quotas do not represent these products.
+- **Google AI Pro** (medium): three separate meters for Antigravity, Gemini chat
+  and NotebookLM. Antigravity reads the `agy` CLI's own `/usage` (Gemini, Claude/GPT
+  and Argon quota groups); it does not represent Gemini chat or NotebookLM, and the
+  Gemini API quota is separate from all three.
 
 The overview uses a three-column grid: Codex beside a double-width Claude card,
-then Kimi / GLM / DeepSeek and Gemini / NotebookLM.
+then Kimi / GLM / DeepSeek and Antigravity / Gemini chat / NotebookLM.
 Its compact header shows only the title; the branding and aggregate readiness
 counter are omitted so the usage cards have more vertical space.
 The widget design uses a dark blue background, provider marks, compact colored
