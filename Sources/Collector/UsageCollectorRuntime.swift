@@ -34,6 +34,10 @@ final class UsageCollectorRuntime {
                LMStudioLocalProvider(endpoint: URL(string: preferences.lmstudioEndpoint)!), OllamaProvider(),
                GeminiAPIProvider(budget: { Preferences.storedGeminiAPIMonthlyTokenBudget() })] + web
         preferences.reconcile(discoveredIDs: providers.map(\.id))
+        if !UserDefaults.codenotch.bool(forKey: "introducedAntigravityDashboard") {
+            preferences.setConnected(true, for: "gemini")
+            UserDefaults.codenotch.set(true, forKey: "introducedAntigravityDashboard")
+        }
         let store = UsageStore(providers: providers,
             disconnected: preferences.disconnectedIDs(among: providers.map(\.id)), order: preferences.providerOrder)
         self.store = store

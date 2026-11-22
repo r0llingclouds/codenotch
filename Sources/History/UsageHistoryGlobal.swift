@@ -22,6 +22,7 @@ enum UsageHistoryGlobal {
         case "codex": preferred = ["primary", "secondary"]
         case "kimi": preferred = ["monthly", "rolling"]
         case "glm": preferred = ["weekly", "session"]
+        case "gemini": preferred = ["gemini-weekly", "gemini-5h", "gemini-hourly"]
         case "gemini-chat", "notebooklm": preferred = ["weekly", "current"]
         default: preferred = []
         }
@@ -34,7 +35,7 @@ enum UsageHistoryGlobal {
     /// The quota that covers everything a service runs: its weekly window,
     /// where it reports one.
     static func totalQuota(_ trends: [UsageHistoryTrend]) -> UsageHistoryTrend? {
-        for id in ["weekly_all", "secondary", "primary"] {
+        for id in ["weekly_all", "secondary", "primary", "gemini-weekly"] {
             if let match = trends.first(where: { $0.series.meterID == id }) { return match }
         }
         return trends.first

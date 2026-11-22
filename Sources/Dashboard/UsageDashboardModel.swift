@@ -80,6 +80,7 @@ enum DashboardCopy {
         case "kimi": return L10n.t("Kimi Code session and monthly allowances.")
         case "glm": return L10n.t("Usage on your Z.ai GLM Coding Plan.")
         case "deepseek": return L10n.t("Your remaining DeepSeek API balance, in the account currency.")
+        case "gemini": return L10n.t("Antigravity CLI & IDE model quotas (Gemini, Claude/GPT and Argon). Separate from Gemini chat.")
         case "gemini-chat": return L10n.t("Limits reported by Gemini chat for your signed-in Google account.")
         default: return L10n.t("Limits reported by NotebookLM for your signed-in Google account.")
         }

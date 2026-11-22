@@ -46,10 +46,11 @@ struct UsageHistoryRecord: Sendable {
             guard value.isFinite, value >= 0 else { return nil }
             // Scoped quotas can change model without changing their vendor ID.
             // Preserve that distinction and never combine currencies or units.
-            let components = [snapshot.id, window.id, window.label, kind.rawValue, unit]
+            let label = WidgetSnapshotPublisher.meterLabel(for: window, in: snapshot.windows, providerID: snapshot.id)
+            let components = [snapshot.id, window.id, label, kind.rawValue, unit]
             let id = components.map { "\($0.utf8.count):\($0)" }.joined()
             return Self(series: UsageHistorySeries(id: id, providerID: snapshot.id,
-                meterID: window.id, label: window.label, kind: kind, unit: unit,
+                meterID: window.id, label: label, kind: kind, unit: unit,
                 firstAt: date, lastAt: date),
                 point: UsageHistoryPoint(date: date, value: value, resetsAt: window.resetsAt))
         }

@@ -375,6 +375,7 @@ struct DashboardBrand: View {
         case "kimi": return .kimi
         case "glm": return .glm
         case "deepseek": return .deepseek
+        case "gemini": return .antigravity
         case "gemini-chat": return .geminiSpark
         default: return nil
         }
@@ -384,7 +385,7 @@ struct DashboardBrand: View {
         switch id {
         case "codex": return L10n.t("ChatGPT · Codex")
         case "deepseek": return L10n.t("API balance")
-        case "gemini-chat", "notebooklm": return L10n.t("Google AI")
+        case "gemini", "gemini-chat", "notebooklm": return L10n.t("Google AI")
         default: return L10n.t("Coding plan")
         }
     }
@@ -396,6 +397,7 @@ struct DashboardBrand: View {
         case "kimi": return Color(red: 0.77, green: 0.65, blue: 1)
         case "glm": return Color(red: 0.46, green: 0.78, blue: 0.98)
         case "deepseek": return Color(red: 0.52, green: 0.65, blue: 1)
+        case "gemini": return Color(red: 0.38, green: 0.72, blue: 1)
         case "gemini-chat": return Color(red: 0.65, green: 0.70, blue: 1)
         case "notebooklm": return Color(red: 0.44, green: 0.84, blue: 0.86)
         default: return Color(red: 1, green: 0.59, blue: 0.76)

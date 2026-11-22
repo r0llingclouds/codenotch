@@ -137,8 +137,30 @@ final class UsageWidgetTests: XCTestCase {
 
     func testSnapshotContainsAllMetersAndDoesNotInventMissingValues() {
         let snapshot = WidgetSnapshotPublisher.makeSnapshot([], disconnected: [], dates: [:])
-        XCTAssertEqual(snapshot.providers.map(\.id), ["codex", "claude", "kimi", "glm", "deepseek", "gemini-chat", "notebooklm"])
+        XCTAssertEqual(snapshot.providers.map(\.id), ["codex", "claude", "kimi", "glm", "deepseek", "gemini", "gemini-chat", "notebooklm"])
         XCTAssertTrue(snapshot.providers.allSatisfy { $0.state == .notConnected && $0.meters.isEmpty && $0.measuredAt == nil })
+    }
+
+    func testAntigravityMetersCarryModelFamilyLabelsAndShowGeminiOnOverview() throws {
+        let now = Date(timeIntervalSince1970: 2000)
+        let windows = try AntigravityUsageCLI.parse("""
+        Gemini Models\tWeekly Limit Remaining\t84%\t2026-11-28T11:24:27Z
+        Gemini Models\tFive Hour Limit Remaining\t45%\t2026-11-22T15:05:16Z
+        Claude and GPT models\tWeekly Limit Remaining\t100%\t2026-11-29T13:03:48Z
+        Claude and GPT models\tFive Hour Limit Remaining\t100%\t2026-11-22T18:03:48Z
+        Gemini 4 Argon\tGemini 4 Argon Weekly Limit\t100%\t2026-11-29T13:03:48Z
+        """)
+        let source = ProviderSnapshot(id: "gemini", displayName: "Antigravity", glyph: .antigravity,
+            fidelity: .official, status: .ok, windows: windows)
+        let snapshot = WidgetSnapshotPublisher.makeSnapshot([source], disconnected: [], dates: ["gemini": now], now: now)
+        let reading = try XCTUnwrap(snapshot.providers.first { $0.id == "gemini" })
+        XCTAssertEqual(reading.state, .ready)
+        XCTAssertEqual(reading.meters.map(\.id), ["gemini-5h", "gemini-weekly", "3p-5h", "3p-weekly", "gemini-argon-weekly"])
+        XCTAssertEqual(reading.meters.map(\.label), ["Gemini 5h", "Gemini Weekly", "Claude/GPT 5h", "Claude/GPT Weekly", "Argon Weekly"])
+        let overview = UsageMeterSelection.overviewMeters(for: reading)
+        XCTAssertEqual(overview.map(\.id), ["gemini-5h", "gemini-weekly"])
+        XCTAssertEqual(overview[0].usedFraction ?? -1, 0.55, accuracy: 0.0001)
+        XCTAssertEqual(overview[1].usedFraction ?? -1, 0.16, accuracy: 0.0001)
     }
 
     func testCursorIsLeftOutOfTheWidgetsAndDashboard() throws {

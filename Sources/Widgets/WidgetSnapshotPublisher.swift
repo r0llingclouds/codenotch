@@ -85,7 +85,8 @@ final class WidgetSnapshotPublisher {
                 if let money = window.money {
                     value = String(format: "%.2f %@ left", money.remaining, money.currency)
                 } else { value = window.summary }
-                return WidgetUsageMeter(id: window.id, label: window.label,
+                let label = Self.meterLabel(for: window, in: snapshot.windows, providerID: snapshot.id)
+                return WidgetUsageMeter(id: window.id, label: label,
                     usedFraction: window.money == nil ? fraction : nil, value: value,
                     resetsAt: window.resetsAt, resetDescription: window.detail)
             }
@@ -93,6 +94,25 @@ final class WidgetSnapshotPublisher {
                 measuredAt: dates[item.id] ?? snapshot.status.staleSince, meters: meters)
         }
         return UsageWidgetSnapshot(generatedAt: now, providers: readings)
+    }
+
+    /// Flat surfaces (dashboard details, widgets, history) do not render group
+    /// headers around windows, so multi-group Antigravity windows carry their
+    /// model family in the meter label.
+    nonisolated static func meterLabel(for window: LimitWindow, in windows: [LimitWindow], providerID: String) -> String {
+        if providerID == "gemini" {
+            switch window.id.lowercased() {
+            case "gemini-5h", "gemini-hourly": return L10n.t("Gemini 5h")
+            case "gemini-weekly": return L10n.t("Gemini Weekly")
+            case "3p-5h", "3p-hourly": return L10n.t("Claude/GPT 5h")
+            case "3p-weekly": return L10n.t("Claude/GPT Weekly")
+            case "gemini-argon-weekly": return L10n.t("Argon Weekly")
+            default: break
+            }
+        }
+        guard let group = window.group, !group.isEmpty else { return window.label }
+        let duplicate = windows.filter { $0.label == window.label }.count > 1
+        return duplicate ? "\(group) · \(window.label)" : window.label
     }
 
     func publish(_ snapshot: UsageWidgetSnapshot) {

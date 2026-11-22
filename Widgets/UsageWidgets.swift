@@ -4,12 +4,13 @@ import WidgetKit
 
 enum UsageProviderChoice: String, AppEnum {
     case codex, claude, kimi, glm, deepseek
+    case antigravity = "gemini"
     case gemini = "gemini-chat"
     case notebooklm
     static var typeDisplayRepresentation: TypeDisplayRepresentation = "Provider"
     static var caseDisplayRepresentations: [Self: DisplayRepresentation] = [
         .codex: "Codex", .claude: "Claude", .kimi: "Kimi", .glm: "GLM",
-        .deepseek: "DeepSeek", .gemini: "Gemini chat", .notebooklm: "NotebookLM"
+        .deepseek: "DeepSeek", .antigravity: "Antigravity", .gemini: "Gemini chat", .notebooklm: "NotebookLM"
     ]
 }
 
@@ -113,7 +114,7 @@ struct GoogleUsageWidget: Widget {
         }
             .contentMarginsDisabled()
             .configurationDisplayName("Google AI Pro")
-            .description("Gemini chat and NotebookLM as separate allowances.")
+            .description("Antigravity, Gemini chat and NotebookLM as separate allowances.")
             .supportedFamilies([.systemMedium])
     }
 }

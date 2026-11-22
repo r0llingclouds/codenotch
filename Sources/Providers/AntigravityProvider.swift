@@ -42,6 +42,7 @@ actor AntigravityProvider: UsageProvider {
     /// number, and a ring that reads 8% one minute and 31 the next looks broken
     /// rather than degraded.
     private var everBridged = false
+    private var everReadCLI = false
 
     /// How the language server is asked, when a test needs to say. Production
     /// leaves this nil and goes through `localQuota()`, which spawns `ps` and
@@ -49,15 +50,27 @@ actor AntigravityProvider: UsageProvider {
     /// nothing a test can arrange, and the ordering this fixes is exactly what
     /// would otherwise go uncovered.
     private let localQuotaOverride: (@Sendable () async -> [LimitWindow]?)?
+    nonisolated private let cli: AntigravityUsageCLI?
+    private let cliRefreshInterval: TimeInterval
+    private var lastCLIWindows: (windows: [LimitWindow], at: Date)?
+    private var lastCLIAttempt: Date?
+    private let now: @Sendable () -> Date
 
     init(profile: AntigravityProfile = .default(),
          session: URLSession = .shared,
-         localQuota: (@Sendable () async -> [LimitWindow]?)? = nil) {
+         localQuota: (@Sendable () async -> [LimitWindow]?)? = nil,
+         cli: AntigravityUsageCLI? = nil,
+         useDefaultCLI: Bool = true,
+         cliRefreshInterval: TimeInterval = 2 * 60,
+         now: @escaping @Sendable () -> Date = Date.init) {
         self.profile = profile
         self.id = profile.id
         self.displayName = profile.displayName
         self.session = session
         self.localQuotaOverride = localQuota
+        self.cli = cli ?? ((localQuota == nil && profile.slug == nil && useDefaultCLI) ? AntigravityUsageCLI.locate() : nil)
+        self.cliRefreshInterval = cliRefreshInterval
+        self.now = now
         self.localSession = URLSession(configuration: .ephemeral,
                                        delegate: LocalhostTrust(),
                                        delegateQueue: nil)
@@ -81,6 +94,15 @@ actor AntigravityProvider: UsageProvider {
                 label: email,
                 plan: plan,
                 source: profile.sourceName,
+                manageURL: URL(string: "https://antigravity.google")
+            )
+        }
+
+        if profile.slug == nil && cli != nil {
+            return ProviderAccount(
+                label: L10n.t("Antigravity CLI"),
+                plan: L10n.t("Active"),
+                source: "Antigravity CLI",
                 manageURL: URL(string: "https://antigravity.google")
             )
         }
@@ -122,6 +144,16 @@ actor AntigravityProvider: UsageProvider {
             if localQuotaOverride != nil && everBridged {
                 throw UsageProviderError.credentialExpired
             }
+
+            if let windows = await cliQuota(), !windows.isEmpty {
+                everReadCLI = true
+                UserDefaults.codenotch.set(true, forKey: "AntigravityEverBridged")
+
+                return ProviderSnapshot(id: id, displayName: displayName, glyph: glyph,
+                                        fidelity: .official, status: .ok, windows: windows,
+                                        headlineID: resolveHeadlineID(for: windows),
+                                        weeklyID: resolveWeeklyID(for: windows))
+            }
         }
 
         // 1. Try reading credentials and asking Google Cloud Code PA directly
@@ -146,7 +178,7 @@ actor AntigravityProvider: UsageProvider {
             }
         }
 
-        if everBridged { throw UsageProviderError.credentialExpired }
+        if everBridged || everReadCLI { throw UsageProviderError.credentialExpired }
         // is the only number left — reported as a *count*, with no
         // `usedFraction`, which is a case the model already knows: the cell
         // prints the number and the ring draws its track with no arc, because
@@ -176,7 +208,7 @@ actor AntigravityProvider: UsageProvider {
     nonisolated func resolveHeadlineID(for windows: [LimitWindow]) -> String {
         let preferredLimit = Preferences.storedAntigravityHeadlineLimit()
         let preferredModel = Preferences.storedAntigravityHeadlineModel()
-        let modelCandidates = windows.filter { $0.id.hasPrefix(preferredModel.rawValue) }
+        let modelCandidates = windows.filter { matches($0, model: preferredModel) }
         let candidates = modelCandidates.isEmpty ? windows : modelCandidates
 
         if preferredLimit != .automatic {
@@ -193,6 +225,16 @@ actor AntigravityProvider: UsageProvider {
         return (usable.isEmpty ? fractional : usable).max(by: constrainedBefore)?.id
             ?? candidates.first?.id
             ?? "\(preferredModel.rawValue)-hourly"
+    }
+
+    private nonisolated func matches(_ window: LimitWindow, model: AntigravityHeadlineModel) -> Bool {
+        let id = window.id.lowercased()
+        switch model {
+        case .gemini:
+            return id.hasPrefix("gemini") && !id.hasPrefix("gemini-argon")
+        case .thirdParty:
+            return id.hasPrefix("3p")
+        }
     }
 
     private nonisolated func matches(_ window: LimitWindow, cadence: AntigravityHeadlineLimit) -> Bool {
@@ -218,7 +260,7 @@ actor AntigravityProvider: UsageProvider {
 
     nonisolated func resolveWeeklyID(for windows: [LimitWindow]) -> String? {
         let preferredModel = Preferences.storedAntigravityHeadlineModel()
-        let modelCandidates = windows.filter { $0.id.hasPrefix(preferredModel.rawValue) }
+        let modelCandidates = windows.filter { matches($0, model: preferredModel) }
         let candidates = modelCandidates.isEmpty ? windows : modelCandidates
         let weekly = candidates.filter { window in
             window.duration == 7 * 86400 ||
@@ -226,6 +268,29 @@ actor AntigravityProvider: UsageProvider {
                 window.label.lowercased().contains("weekly")
         }
         return weekly.max(by: constrainedBefore)?.id
+    }
+
+    /// Ask the standalone `agy` CLI when the loopback language server is absent
+    /// or demands a CSRF token it did not publish on its command line.
+    private func cliQuota() async -> [LimitWindow]? {
+        guard let cli else { return nil }
+        let current = now()
+        if let cached = lastCLIWindows, current.timeIntervalSince(cached.at) < cliRefreshInterval {
+            return cached.windows
+        }
+        if let attempt = lastCLIAttempt, current.timeIntervalSince(attempt) < cliRefreshInterval {
+            return nil
+        }
+        lastCLIAttempt = current
+        do {
+            let windows = try await cli.read()
+            guard !windows.isEmpty else { return nil }
+            lastCLIWindows = (windows, current)
+            return windows
+        } catch {
+            Log.usage.error("Antigravity CLI quota error: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     /// Ask Antigravity's language server, if it is running.

@@ -9,8 +9,8 @@ struct UsageWidgetSnapshot: Codable, Equatable {
 
     static let catalogue: [(id: String, name: String)] = [
         ("codex", "Codex"), ("claude", "Claude"), ("kimi", "Kimi"),
-        ("glm", "GLM"), ("deepseek", "DeepSeek"), ("gemini-chat", "Gemini"),
-        ("notebooklm", "NotebookLM")
+        ("glm", "GLM"), ("deepseek", "DeepSeek"), ("gemini", "Antigravity"),
+        ("gemini-chat", "Gemini chat"), ("notebooklm", "NotebookLM")
     ]
 
     static var empty: Self {

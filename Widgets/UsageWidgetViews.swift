@@ -25,6 +25,7 @@ private struct ProviderStyle {
         case "kimi": return Color(red: 0.77, green: 0.65, blue: 1)
         case "glm": return Color(red: 0.46, green: 0.78, blue: 0.98)
         case "deepseek": return Color(red: 0.52, green: 0.65, blue: 1)
+        case "gemini": return Color(red: 0.38, green: 0.72, blue: 1)
         case "gemini-chat": return Color(red: 0.65, green: 0.70, blue: 1)
         case "notebooklm": return Color(red: 0.44, green: 0.84, blue: 0.86)
         default: return Color(red: 1, green: 0.59, blue: 0.76)
@@ -36,6 +37,7 @@ private struct ProviderStyle {
         case "claude": return GlyphOutline.claude
         case "kimi": return GlyphOutline.kimi
         case "glm": return GlyphOutline.glm
+        case "gemini": return GlyphOutline.antigravity
         case "gemini-chat": return GlyphOutline.gemini
         default: return []
         }
@@ -89,10 +91,13 @@ private func statusText(_ state: WidgetProviderReading.State) -> String {
 private func compactLabel(_ meter: WidgetUsageMeter) -> String {
     switch meter.id {
     case "session", "current": return L10n.t("Session")
-    case "weekly", "weekly_all": return L10n.t("Week")
+    case "weekly", "weekly_all", "gemini-weekly": return L10n.t("Week")
     case "monthly": return L10n.t("Month")
     case "monthly-code": return L10n.t("Code")
-    case "rolling": return "5h"
+    case "rolling", "gemini-5h", "gemini-hourly": return "5h"
+    case "3p-5h", "3p-hourly": return "3P 5h"
+    case "3p-weekly": return "3P Wk"
+    case "gemini-argon-weekly": return "Argon"
     case "auto": return L10n.t("Auto")
     case "api": return "API"
     default:
@@ -293,7 +298,7 @@ struct UsageOverview: View {
     let date: Date
     var googleOnly = false
 
-    private var columns: Int { googleOnly ? 2 : 3 }
+    private var columns: Int { 3 }
 
     private func columnSpan(for reading: WidgetProviderReading) -> Int {
         !googleOnly && reading.id == "claude" ? 2 : 1
@@ -301,7 +306,7 @@ struct UsageOverview: View {
 
     private var cardRows: [[WidgetProviderReading]] {
         let readings = snapshot.providers.filter {
-            !googleOnly || ["gemini-chat", "notebooklm"].contains($0.id)
+            !googleOnly || ["gemini", "gemini-chat", "notebooklm"].contains($0.id)
         }
         var rows: [[WidgetProviderReading]] = []
         var row: [WidgetProviderReading] = []
